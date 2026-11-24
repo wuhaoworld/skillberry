@@ -1,36 +1,20 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Skillberry 工作台
 
-## Getting Started
+在项目中创建任务，用 Agent 读写项目文件。一个项目对应一个持久化 Vercel Sandbox，一个任务对应一个 Claude Code Harness 会话。
 
-First, run the development server:
+## 本机运行
+
+使用 Node.js 24 和 npm。在 `.env.local` 中配置 Vercel Sandbox 凭证和模型凭证。Sandbox 可用 `VERCEL_OIDC_TOKEN`，也可用 `VERCEL_TOKEN`、`VERCEL_TEAM_ID` 与 `VERCEL_PROJECT_ID`。模型使用 `AI_GATEWAY_API_KEY` 或 `ANTHROPIC_API_KEY`，默认 Claude Sonnet 4.6，也可选择 Claude Haiku 4.5。
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm ci
+npm run dev -- --hostname 127.0.0.1
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 [本机工作台](http://127.0.0.1:3000)。首版为单人内测，本机以回环地址运行。若放到共享网络，需要在工作台前增加访问控制。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+项目和任务记录默认保存在 `.skillberry/workbench.sqlite`。可将 `SKILLBERRY_DATA_DIR` 指向有写入权限的持久化目录。项目文件和 Harness 运行时数据保存在 Vercel Sandbox 的文件系统中，暂停后的恢复受 Vercel 快照保留策略约束。重启应用时沿用同一数据库目录和 Vercel 项目。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 验证
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+运行 `npm run lint`、`npx tsc --noEmit` 和 `npm run build`。真实执行场景及预期结果见 [MVP 需求文档](docs/agent-mvp-prd.md)。

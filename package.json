@@ -9,8 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/harness": "1.0.192",
+    "@ai-sdk/harness-claude-code": "1.0.196",
     "@ai-sdk/react": "^4.0.186",
+    "@ai-sdk/sandbox-vercel": "1.0.192",
     "@base-ui/react": "^1.9.0",
+    "@shadcn/react": "^0.3.1",
+    "@vercel/sandbox": "3.9.1",
     "ai": "^7.0.181",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
@@ -24,12 +29,17 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
-    "@types/node": "^20",
+    "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "$zod"
+    }
   }
 }

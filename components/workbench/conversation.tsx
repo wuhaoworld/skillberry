@@ -1,0 +1,296 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, isToolUIPart, getToolName, type UIMessage } from "ai";
+import { Archive, ArrowUp, Check, ChevronDown, FilePenLine, FileText, LoaderCircle, Plus, Square } from "lucide-react";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { InputGroup, InputGroupAddon, InputGroupTextarea } from "@/components/ui/input-group";
+import { Message, MessageContent } from "@/components/ui/message";
+import {
+  MessageScroller, MessageScrollerButton, MessageScrollerContent,
+  MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
+import { Trace, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
+import type { Model, Project, Task, Workbench } from "@/lib/workbench";
+
+type Props = {
+  id: string;
+  existing: boolean;
+  loaded: boolean;
+  modelOptions: Model[];
+  projects: Project[];
+  project?: Project;
+  task?: Task;
+  busy: boolean;
+  onProject: (id: string) => void;
+  onNewProject: () => void;
+  onAccepted: (id: string, projectId: string) => void;
+  refresh: () => Promise<void>;
+};
+
+const transport = new DefaultChatTransport({
+  api: "/api/chat",
+  prepareSendMessagesRequest: ({ body }) => ({ body: body ?? {} }),
+});
+
+const labels = {
+  running: "执行中",
+  completed: "已完成",
+  stopped: "已停止",
+  failed: "执行失败",
+};
+
+export function Conversation(props: Props) {
+  const { id, existing, project, task, modelOptions, refresh } = props;
+  const [draft, setDraft] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [stage, setStage] = useState("");
+  const [pendingRun, setPendingRun] = useState("");
+  const [stoppingRun, setStoppingRun] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [loadingHistory, setLoadingHistory] = useState(existing);
+  const accepted = useRef(false);
+  const requestKey = useRef<{ text: string; projectId: string; model: string; id: string }>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const { messages, sendMessage, status, error, clearError, setMessages } = useChat({
+    id,
+    transport,
+    onData(part) {
+      if (part.type !== "data-stage" || typeof part.data !== "string") return;
+      setStage(part.data);
+      if (!accepted.current && requestKey.current) {
+        accepted.current = true;
+        props.onAccepted(id, requestKey.current.projectId);
+      }
+    },
+  });
+
+  const sending = status === "submitted" || status === "streaming" || Boolean(pendingRun);
+  const running = sending || task?.status === "running";
+  const runId = pendingRun || task?.runId;
+  const stopping = Boolean(runId && (stoppingRun === runId || task?.stopping && task.runId === runId));
+  const model = selectedModel || (modelOptions.some(item => item.id === task?.model) ? task?.model : modelOptions[0]?.id);
+  const modelName = modelOptions.find(item => item.id === model)?.name;
+  const canSend = Boolean(id && !loadingHistory && project?.status === "ready" && modelName && draft.trim() && !running && !props.busy && !task?.contextLost);
+  const lastStatus = task?.status;
+  const lastRun = task?.runId;
+
+  useEffect(() => {
+    if (!existing || sending) return;
+    const controller = new AbortController();
+
+    async function load() {
+      try {
+        const response = await fetch(`/api/workbench?task=${encodeURIComponent(id)}`, { signal: controller.signal, cache: "no-store" });
+        if (!response.ok) throw new Error(response.status === 404 ? "任务不存在，请新建对话。" : "暂时无法读取任务历史。");
+        const snapshot: Workbench = await response.json();
+        if (controller.signal.aborted) return;
+        if (snapshot.task) setMessages(snapshot.task.messages);
+        setLoadingHistory(false);
+      } catch (cause) {
+        if (!controller.signal.aborted) setActionError(cause instanceof Error ? cause.message : "暂时无法读取任务历史。");
+      }
+    }
+
+    void load();
+    const interval = lastStatus === "running" ? setInterval(() => { void load(); }, 1_500) : undefined;
+    return () => { controller.abort(); clearInterval(interval); };
+  }, [id, existing, sending, lastStatus, lastRun, setMessages]);
+
+  async function runPrompt(text: string, key: string, modelId: string, retry = false) {
+    if (!project) return;
+    requestKey.current = { id: key, text, projectId: project.id, model: modelId };
+    setPendingRun(key);
+    setStoppingRun("");
+    setActionError("");
+    setStage("正在准备工作区");
+    clearError();
+    if (!retry) setDraft("");
+    accepted.current = false;
+    try {
+      await sendMessage(
+        { id: key, messageId: retry ? key : undefined, role: "user", parts: [{ type: "text", text }] },
+        { body: { id: key, taskId: id, projectId: project.id, model: modelId, text, retry } },
+      );
+    } catch {
+      setActionError("提交失败，请刷新任务记录后重试。");
+    } finally {
+      if (!accepted.current && !retry) {
+        setDraft(current => current || text);
+        setMessages(current => current.filter(message => message.id !== key));
+      } else {
+        requestKey.current = null;
+      }
+      await refresh();
+      setPendingRun("");
+    }
+  }
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSend || !project || !model) return;
+    const text = draft.trim();
+    const previous = requestKey.current;
+    const key = previous?.text === text && previous.projectId === project.id && previous.model === model
+      ? previous.id : crypto.randomUUID();
+    void runPrompt(text, key, model);
+  }
+
+  const retryMessage = task?.retryable && !running && !props.busy && project?.status === "ready"
+    && modelOptions.some(item => item.id === task.model)
+    ? messages.find(message => message.id === task.runId)?.parts.find(part => part.type === "text")
+    : undefined;
+
+  async function stop() {
+    if (!runId || stopping) return;
+    setStoppingRun(runId);
+    setActionError("");
+    try {
+      const response = await fetch("/api/chat", {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: runId, taskId: id }),
+      });
+      if (!response.ok) throw new Error();
+      if (!(await response.json()).stopping) setStoppingRun("");
+      await refresh();
+    } catch {
+      setStoppingRun("");
+      setActionError("停止请求失败，请重试。");
+    }
+  }
+
+  const notice = actionError || (props.busy ? "这个项目正在执行其他任务，请等当前轮次结束。"
+    : task?.contextLost ? "原对话上下文已无法恢复。请在此项目中新建对话。"
+    : project?.status === "unavailable" ? "项目文件工作区已无法恢复，历史对话仍可查看。"
+    : project?.status === "preparing" ? "正在准备项目。"
+    : props.loaded && !modelOptions.length ? "模型尚未配置，请设置服务端模型凭证。"
+    : selectedModel && !modelName ? "该模型当前不可用，请重新选择。"
+    : error?.message || task?.error || "");
+
+  const isChat = existing || running;
+  return (
+    <section className="conversation" data-chat={isChat} aria-label={isChat ? "任务对话" : "新建对话"}>
+      {isChat ? (
+        <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+          <MessageScroller className="transcript">
+            <MessageScrollerViewport aria-label="对话记录">
+              <MessageScrollerContent className="transcript-content">
+                {loadingHistory && !messages.length && <p className="status-text">正在加载任务记录</p>}
+                {messages.map((message, index) => (
+                  <MessageScrollerItem key={message.id} messageId={message.id}>
+                    <ChatMessage message={message} running={running && index === messages.length - 1} />
+                  </MessageScrollerItem>
+                ))}
+                {(running || task?.status === "stopped" || task?.status === "failed") && (
+                  <div className="status-text" role="status">
+                    {running && <LoaderCircle className="motion-safe:animate-spin" />}
+                    {running ? (stopping ? "正在停止" : sending ? stage || "正在准备工作区" : "Agent 正在执行")
+                      : task && labels[task.status]}
+                  </div>
+                )}
+              </MessageScrollerContent>
+            </MessageScrollerViewport>
+            <MessageScrollerButton aria-label="滚动到最新消息" />
+          </MessageScroller>
+        </MessageScrollerProvider>
+      ) : <h1 className="greeting">我能为你做什么？</h1>}
+      <div className="composer-wrap">
+        {notice && <p className="composer-notice" role="status">{notice}</p>}
+        <div className="composer-shell" data-new={!isChat}>
+          {!isChat && (
+            <div className="project-picker-row">
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button variant="ghost" className="project-picker" />}>
+                  <Archive data-icon="inline-start" /><span className="truncate">{project?.name ?? "选择项目"}</span><ChevronDown data-icon="inline-end" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" aria-label="选择项目" className="project-menu">
+                  <DropdownMenuGroup>
+                    {props.projects.map(item => (
+                      <DropdownMenuItem key={item.id} disabled={item.status !== "ready"} onClick={() => props.onProject(item.id)}>
+                        <Archive /><span className="truncate">{item.name}</span>
+                        {item.id === project?.id && <Check className="ml-auto" />}
+                        {item.status !== "ready" && <span className="ml-auto text-xs">未就绪</span>}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
+                  {props.projects.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuGroup><DropdownMenuItem onClick={props.onNewProject}><Plus />新建项目</DropdownMenuItem></DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+          <form ref={form} onSubmit={submit}>
+            <InputGroup className="composer">
+              <InputGroupTextarea aria-label="任务描述" className="composer-input" value={draft} maxLength={20_000}
+                placeholder={isChat ? "继续这项任务…" : "描述你想完成的任务"}
+                onChange={event => setDraft(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+                    event.preventDefault();
+                    form.current?.requestSubmit();
+                  }
+                }} />
+              <InputGroupAddon align="block-end" className="composer-actions">
+                {task && retryMessage && (
+                  <Button type="button" variant="ghost" className="mr-auto"
+                    onClick={() => void runPrompt(retryMessage.text, task.runId, task.model, true)}>重试本轮</Button>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger render={<Button type="button" variant="ghost" className="model-picker" disabled={!modelOptions.length} />}>
+                    {modelName || "选择模型"}<ChevronDown data-icon="inline-end" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="top" align="end" aria-label="选择模型" className="model-menu">
+                    <DropdownMenuRadioGroup value={model ?? ""} onValueChange={setSelectedModel}>
+                      {modelOptions.map(item => <DropdownMenuRadioItem key={item.id} value={item.id} closeOnClick>{item.name}</DropdownMenuRadioItem>)}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {running ? (
+                  <Button type="button" className="send-button" size="icon" aria-label="停止执行" disabled={stopping || !runId} onClick={stop}><Square /></Button>
+                ) : <Button type="submit" className="send-button" size="icon" aria-label="发送任务" disabled={!canSend}><ArrowUp /></Button>}
+              </InputGroupAddon>
+            </InputGroup>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ChatMessage({ message, running }: { message: UIMessage; running: boolean }) {
+  const user = message.role === "user";
+  return (
+    <Message align={user ? "end" : "start"}>
+      <MessageContent>
+        {message.parts.map((part, index) => {
+          if (part.type === "text") {
+            return (
+              <Bubble key={index} align={user ? "end" : "start"} variant={user ? "default" : "ghost"} className={user ? "user-bubble" : "agent-bubble"}>
+                <BubbleContent className="message-text">{part.text}</BubbleContent>
+              </Bubble>
+            );
+          }
+          if (!isToolUIPart(part)) return null;
+          const writing = getToolName(part) === "writeProjectFile";
+          const finished = part.state === "output-available";
+          const failed = part.state === "output-error";
+          return (
+            <Trace key={part.toolCallId}>
+              <TraceLine status={failed ? "error" : finished ? undefined : running ? "running" : "pending"}>
+                <TraceIcon>{writing ? <FilePenLine /> : <FileText />}</TraceIcon>
+                <TraceTitle>{writing ? "写入项目文件" : getToolName(part) === "readProjectFile" ? "读取项目文件" : "项目操作"}</TraceTitle>
+                <TraceDescription>{finished ? "操作完成" : failed ? "操作未完成" : running ? "执行中" : "已中断"}</TraceDescription>
+              </TraceLine>
+            </Trace>
+          );
+        })}
+      </MessageContent>
+    </Message>
+  );
+}
