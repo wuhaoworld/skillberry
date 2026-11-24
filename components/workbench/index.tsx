@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { Archive, ChevronDown, ChevronRight, FolderPlus, Menu, MessageSquare, Plus, SquarePen, X } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, FolderPlus, Menu, Plus, SquarePen, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -24,6 +24,8 @@ export function Workbench() {
   const [loadError, setLoadError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const refreshVersion = useRef(0);
+  const hasActiveWork = data.tasks.some(task => task.status === "running")
+    || data.projects.some(project => project.status === "preparing");
 
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
@@ -41,14 +43,27 @@ export function Workbench() {
   }, []);
 
   useEffect(() => {
+    function refreshWhenVisible() {
+      if (!document.hidden) void refresh();
+    }
+
     const start = setTimeout(() => {
       const taskId = new URL(window.location.href).searchParams.get("task");
       setView({ id: taskId || crypto.randomUUID(), existing: Boolean(taskId) });
       void refresh();
     }, 0);
-    const interval = setInterval(() => { if (!document.hidden) void refresh(); }, 2_000);
-    return () => { clearTimeout(start); clearInterval(interval); };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      clearTimeout(start);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [refresh]);
+
+  useEffect(() => {
+    if (!hasActiveWork) return;
+    const interval = setInterval(() => { if (!document.hidden) void refresh(); }, 2_000);
+    return () => clearInterval(interval);
+  }, [hasActiveWork, refresh]);
 
   function navigate(next: View) {
     setView(next);
@@ -66,15 +81,13 @@ export function Workbench() {
   const task = data.tasks.find(item => item.id === view.id);
   const project = data.projects.find(item => item.id === (task?.projectId ?? view.projectId));
 
-  function openProject(project: Project) {
-    if (project.status === "failed") {
-      showProjectForm(project);
-      return;
-    }
-    const last = data.tasks.find(item => item.projectId === project.id);
-    if (last) navigate({ id: last.id, projectId: project.id, existing: true });
-    else startDraft(project.id);
-    expandProject(project.id);
+  function toggleProject(id: string) {
+    setCollapsed(previous => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function expandProject(id: string) {
@@ -143,32 +156,31 @@ export function Workbench() {
             const projectTasks = data.tasks.filter(entry => entry.projectId === item.id);
             return (
               <div key={item.id} className="py-0.5">
-                <div className="flex min-w-0 items-center rounded-lg data-[selected=true]:bg-sidebar-accent data-[selected=true]:text-sidebar-accent-foreground"
-                  data-selected={project?.id === item.id}>
-                  <Button variant="ghost" size="icon-xs" className="ms-0.5 text-muted-foreground hover:text-muted-foreground aria-expanded:text-muted-foreground" aria-expanded={!isCollapsed}
-                    aria-label={`${isCollapsed ? "展开" : "折叠"} ${item.name}`}
-                    onClick={() => setCollapsed(previous => {
-                      const next = new Set(previous);
-                      if (next.has(item.id)) next.delete(item.id);
-                      else next.add(item.id);
-                      return next;
-                    })}>
-                    {isCollapsed ? <ChevronRight /> : <ChevronDown />}
+                <div className="flex min-w-0 items-center">
+                  <Button variant="ghost"
+                    className="min-w-0 flex-1 justify-start gap-2 overflow-hidden hover:bg-sidebar-accent aria-expanded:bg-transparent aria-expanded:hover:bg-sidebar-accent dark:hover:bg-sidebar-accent"
+                    aria-expanded={!isCollapsed} aria-controls={`project-tasks-${item.id}`}
+                    onClick={() => toggleProject(item.id)}>
+                    {isCollapsed ? <Folder /> : <FolderOpen />}
+                    <span className="truncate">{item.name}</span>
+                    {item.status === "preparing" && <small className="ms-auto text-muted-foreground">准备中</small>}
+                    {item.status === "unavailable" && <small className="ms-auto text-muted-foreground">不可用</small>}
                   </Button>
-                  <Button variant="ghost" className="flex min-w-0 flex-1 justify-start gap-2 overflow-hidden has-data-[icon=inline-start]:pl-1" onClick={() => openProject(item)}>
-                    <Archive data-icon="inline-start" /><span className="truncate">{item.name}</span>
-                    {item.status !== "ready" && <small className="ml-auto text-muted-foreground">{item.status === "preparing" ? "准备中" : item.status === "failed" ? "重试" : "不可用"}</small>}
-                  </Button>
+                  {item.status === "failed" && (
+                    <Button variant="ghost" size="xs" aria-label={`重试创建 ${item.name}`} onClick={() => showProjectForm(item)}>重试</Button>
+                  )}
                 </div>
-                {!isCollapsed && projectTasks.map(entry => (
-                  <Button key={entry.id} variant="ghost"
-                    className="mt-0.5 ml-5.5 flex w-[calc(100%-22px)] justify-start gap-2 overflow-hidden aria-[current=page]:bg-sidebar-accent! aria-[current=page]:text-sidebar-primary!"
-                    aria-current={view.id === entry.id ? "page" : undefined}
-                    onClick={() => navigate({ id: entry.id, projectId: item.id, existing: true })}>
-                    <MessageSquare data-icon="inline-start" /><span className="truncate">{entry.title}</span>
-                    {entry.status === "running" && <span className="ml-auto size-1.5 flex-none rounded-full bg-sidebar-primary" aria-label="执行中" />}
-                  </Button>
-                ))}
+                <div id={`project-tasks-${item.id}`} hidden={isCollapsed}>
+                  {!isCollapsed && projectTasks.map(entry => (
+                    <Button key={entry.id} variant="ghost"
+                      className="mt-0.5 flex w-full justify-start overflow-hidden ps-8.5 aria-[current=page]:bg-sidebar-accent! aria-[current=page]:text-sidebar-primary!"
+                      aria-current={view.id === entry.id ? "page" : undefined}
+                      onClick={() => navigate({ id: entry.id, projectId: item.id, existing: true })}>
+                      <span className="truncate">{entry.title}</span>
+                      {entry.status === "running" && <span className="ms-auto size-1.5 flex-none rounded-full bg-sidebar-primary" aria-label="执行中" />}
+                    </Button>
+                  ))}
+                </div>
               </div>
             );
           })}
@@ -179,7 +191,7 @@ export function Workbench() {
           <Button className="hidden [@media(max-width:680px)]:inline-flex" variant="ghost" size="icon" aria-label="打开侧栏" onClick={() => setMobileMenu(true)}><Menu /></Button>
           {view.existing && task ? (
             <div className="flex min-w-0 items-center gap-2.25 text-[13px] text-muted-foreground">
-              <Archive className="size-3.5 flex-none" />
+              <Folder className="size-3.5 flex-none" />
               <span className="truncate">{project?.name}</span>
               <ChevronRight className="size-3.5 flex-none" />
               <strong className="truncate font-[550] text-foreground">{task.title}</strong>

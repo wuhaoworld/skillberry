@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, getToolName, type UIMessage } from "ai";
 import { cn } from "cn";
-import { Archive, ArrowUp, Check, ChevronDown, FilePenLine, FileText, LoaderCircle, Plus, Square } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, FilePenLine, FileText, Folder, LoaderCircle, Plus, Square } from "lucide-react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
@@ -215,13 +215,13 @@ export function Conversation(props: Props) {
             <div className="px-2.75 pt-1.5 pb-1.25">
               <DropdownMenu>
                 <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="max-w-full" />}>
-                  <Archive data-icon="inline-start" /><span className="truncate">{project?.name ?? "选择项目"}</span><ChevronDown data-icon="inline-end" />
+                  <Folder data-icon="inline-start" /><span className="truncate">{project?.name ?? "选择项目"}</span><ChevronDown data-icon="inline-end" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" aria-label="选择项目" className="min-w-[min(270px,calc(100vw-34px))]">
                   <DropdownMenuGroup>
                     {props.projects.map(item => (
                       <DropdownMenuItem key={item.id} disabled={item.status !== "ready"} onClick={() => props.onProject(item.id)}>
-                        <Archive /><span className="truncate">{item.name}</span>
+                        <Folder /><span className="truncate">{item.name}</span>
                         {item.id === project?.id && <Check className="ml-auto" />}
                         {item.status !== "ready" && <span className="ml-auto text-xs">未就绪</span>}
                       </DropdownMenuItem>
@@ -235,7 +235,7 @@ export function Conversation(props: Props) {
           )}
           <form ref={form} onSubmit={submit}>
             <InputGroup className={cn(
-              "min-h-[117px] rounded-3xl bg-card text-card-foreground dark:bg-card",
+              "min-h-[117px] rounded-3xl bg-card text-card-foreground has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-card",
               !isChat && "-mx-px -mb-px w-[calc(100%+2px)]",
             )}>
               <InputGroupTextarea aria-label="任务描述"

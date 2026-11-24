@@ -7,13 +7,15 @@ import { z } from "zod";
 import type { Model } from "@/lib/workbench";
 
 const workDir = "workspace";
-const models: Model[] = [
+const luna: Model = { id: "openai/gpt-6-luna", name: "GPT-6 Luna" };
+const claudeModels: Model[] = [
   { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
   { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
 ];
 
 export function availableModels() {
-  return process.env.AI_GATEWAY_API_KEY || process.env.ANTHROPIC_API_KEY ? models : [];
+  if (process.env.AI_GATEWAY_API_KEY) return [luna, ...claudeModels];
+  return process.env.ANTHROPIC_API_KEY ? claudeModels : [];
 }
 
 function sandboxName(projectId: string) {
@@ -97,7 +99,7 @@ export function projectAgent(sandbox: Sandbox, signal: AbortSignal) {
       maxTurns: 12,
       hostDisconnectTimeoutMs: 20_000,
     }),
-    model: models[0].id,
+    model: (availableModels()[0] ?? luna).id,
     callOptionsSchema: z.object({ model: z.string() }),
     prepareCall: ({ options, ...settings }) => ({ ...settings, model: options.model }),
     sandboxConfig: { workDir },
