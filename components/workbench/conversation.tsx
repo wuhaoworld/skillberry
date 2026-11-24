@@ -211,7 +211,7 @@ export function Conversation(props: Props) {
         isChat ? "mb-5.5" : "mb-[clamp(22px,5vh,52px)]",
       )}>
         {notice && <p className="mx-1 mb-2 text-[13px] text-destructive" role="status">{notice}</p>}
-        <div className={isChat ? undefined : "rounded-4xl border border-border bg-muted"}>
+        <div className={isChat ? undefined : "rounded-3xl border border-border bg-[#FAFAFA]"}>
           {!isChat && (
             <div className="px-2.75 pt-1.5 pb-1.25">
               <DropdownMenu>
@@ -236,7 +236,7 @@ export function Conversation(props: Props) {
           )}
           <form ref={form} onSubmit={submit}>
             <InputGroup className={cn(
-              "min-h-[117px] rounded-3xl bg-card text-card-foreground has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-card",
+              "min-h-[117px] rounded-2xl bg-card text-card-foreground has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-card",
               !isChat && "-mx-px -mb-px w-[calc(100%+2px)]",
             )}>
               <InputGroupTextarea aria-label="任务描述"
@@ -266,8 +266,10 @@ export function Conversation(props: Props) {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 {running ? (
-                  <Button type="button" size="icon" aria-label="停止执行" disabled={stopping || !runId} onClick={stop}><Square /></Button>
-                ) : <Button type="submit" size="icon" aria-label="发送任务" disabled={!canSend}><ArrowUp /></Button>}
+                  <Button type="button" size="icon" className="rounded-full" aria-label="停止执行" disabled={stopping || !runId} onClick={stop}><Square /></Button>
+                ) : (
+                  <Button type="submit" size="icon" className="rounded-full" aria-label="发送任务" disabled={!canSend}><ArrowUp /></Button>
+                )}
               </InputGroupAddon>
             </InputGroup>
           </form>

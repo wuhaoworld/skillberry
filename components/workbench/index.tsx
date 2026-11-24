@@ -14,6 +14,7 @@ type View = { id: string; projectId?: string; existing?: boolean };
 type ProjectForm = { id: string; name: string; pending: boolean; error?: string };
 
 const initialData: WorkspaceData = { projects: [], tasks: [], models: [] };
+const sidebarItemClassName = "font-normal active:not-aria-[haspopup]:translate-y-0 hover:bg-[#E5E5E5]! dark:hover:text-background!";
 
 export function Workbench() {
   const [data, setData] = useState(initialData);
@@ -141,10 +142,10 @@ export function Workbench() {
           <Button className="ml-auto hidden [@media(max-width:680px)]:inline-flex" variant="ghost" size="icon" aria-label="关闭侧栏" onClick={() => setMobileMenu(false)}><X /></Button>
         </div>
         <div className="grid gap-1.5">
-          <Button className="justify-start" size="lg" onClick={() => startDraft(project?.id)}>
+          <Button className={`justify-start ${sidebarItemClassName}`} variant="ghost" size="lg" onClick={() => startDraft(project?.id)}>
             <SquarePen data-icon="inline-start" />新建对话
           </Button>
-          <Button className="justify-start" variant="ghost" size="lg" onClick={() => showProjectForm()}>
+          <Button className={`justify-start ${sidebarItemClassName}`} variant="ghost" size="lg" onClick={() => showProjectForm()}>
             <FolderPlus data-icon="inline-start" />新建项目
           </Button>
         </div>
@@ -158,7 +159,7 @@ export function Workbench() {
               <div key={item.id} className="py-0.5">
                 <div className="flex min-w-0 items-center">
                   <Button variant="ghost"
-                    className="min-w-0 flex-1 justify-start gap-2 overflow-hidden hover:bg-sidebar-accent aria-expanded:bg-transparent aria-expanded:hover:bg-sidebar-accent dark:hover:bg-sidebar-accent"
+                    className={`min-w-0 flex-1 justify-start gap-2 overflow-hidden aria-expanded:bg-transparent ${sidebarItemClassName}`}
                     aria-expanded={!isCollapsed} aria-controls={`project-tasks-${item.id}`}
                     onClick={() => toggleProject(item.id)}>
                     {isCollapsed ? <Folder /> : <FolderOpen />}
@@ -173,7 +174,7 @@ export function Workbench() {
                 <div id={`project-tasks-${item.id}`} hidden={isCollapsed}>
                   {!isCollapsed && projectTasks.map(entry => (
                     <Button key={entry.id} variant="ghost"
-                      className="mt-0.5 flex w-full justify-start overflow-hidden ps-8.5 aria-[current=page]:bg-sidebar-accent! aria-[current=page]:text-sidebar-primary!"
+                      className={`mt-0.5 flex w-full justify-start overflow-hidden ps-8.5 aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-primary! ${sidebarItemClassName}`}
                       aria-current={view.id === entry.id ? "page" : undefined}
                       onClick={() => navigate({ id: entry.id, projectId: item.id, existing: true })}>
                       <span className="truncate">{entry.title}</span>
