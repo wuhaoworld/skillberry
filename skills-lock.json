@@ -7,6 +7,13 @@
       "sourceType": "github",
       "skillPath": "skills/sandbox/SKILL.md",
       "computedHash": "63f3211b8aacd6c3d03c276d887b1e22ef2fc5774bdc4b8deb0c3785527aa4d0"
+    },
+    "streamdown": {
+      "source": "vercel/streamdown",
+      "commit": "cb65880bed6ce882524daccc27ef9fbc630eccd3",
+      "sourceType": "github",
+      "skillPath": "skills/streamdown/SKILL.md",
+      "computedHash": "0afa0910d93f684a5441460dfcf9157c15783c0ce84cff0bb8cb3227e1a6515b"
     }
   }
 }
