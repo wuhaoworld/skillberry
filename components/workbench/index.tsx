@@ -188,13 +188,20 @@ export function Workbench() {
         </nav>
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col">
-        <header className="flex h-15.5 flex-none items-center gap-2.5 px-6.5 [@media(max-width:680px)]:h-13 [@media(max-width:680px)]:px-3">
+        <header className={`flex flex-none items-center gap-2.5 px-6.5 [@media(max-width:680px)]:px-3 ${view.existing ? "h-[46px]" : "h-15.5 [@media(max-width:680px)]:h-13"}`}>
           <Button className="hidden [@media(max-width:680px)]:inline-flex" variant="ghost" size="icon" aria-label="打开侧栏" onClick={() => setMobileMenu(true)}><Menu /></Button>
           {view.existing && task ? (
-            <div className="flex min-w-0 items-center gap-2.25 text-[13px] text-muted-foreground">
-              <Folder className="size-3.5 flex-none" />
-              <span className="truncate">{project?.name}</span>
-              <ChevronRight className="size-3.5 flex-none" />
+            <div className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+              {project && (
+                <>
+                  <Button type="button" variant="ghost" size="sm" title="在此项目中新建对话"
+                    className="min-w-0 shrink gap-2.25 font-normal hover:bg-accent dark:hover:bg-accent"
+                    onClick={() => startDraft(project.id)}>
+                    <Folder data-icon="inline-start" /><span className="truncate">{project.name}</span>
+                  </Button>
+                  <ChevronRight className="size-3.5 flex-none" />
+                </>
+              )}
               <strong className="truncate font-[550] text-foreground">{task.title}</strong>
             </div>
           ) : null}
