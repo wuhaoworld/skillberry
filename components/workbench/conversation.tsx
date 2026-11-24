@@ -206,7 +206,7 @@ export function Conversation(props: Props) {
           {!isChat && (
             <div className="project-picker-row">
               <DropdownMenu>
-                <DropdownMenuTrigger render={<Button variant="ghost" className="project-picker" />}>
+                <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="project-picker" />}>
                   <Archive data-icon="inline-start" /><span className="truncate">{project?.name ?? "选择项目"}</span><ChevronDown data-icon="inline-end" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" aria-label="选择项目" className="project-menu">
@@ -242,7 +242,7 @@ export function Conversation(props: Props) {
                     onClick={() => void runPrompt(retryMessage.text, task.runId, task.model, true)}>重试本轮</Button>
                 )}
                 <DropdownMenu>
-                  <DropdownMenuTrigger render={<Button type="button" variant="ghost" className="model-picker" disabled={!modelOptions.length} />}>
+                  <DropdownMenuTrigger render={<Button type="button" variant="ghost" disabled={!modelOptions.length} />}>
                     {modelName || "选择模型"}<ChevronDown data-icon="inline-end" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent side="top" align="end" aria-label="选择模型" className="model-menu">
@@ -252,8 +252,8 @@ export function Conversation(props: Props) {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 {running ? (
-                  <Button type="button" className="send-button" size="icon" aria-label="停止执行" disabled={stopping || !runId} onClick={stop}><Square /></Button>
-                ) : <Button type="submit" className="send-button" size="icon" aria-label="发送任务" disabled={!canSend}><ArrowUp /></Button>}
+                  <Button type="button" size="icon" aria-label="停止执行" disabled={stopping || !runId} onClick={stop}><Square /></Button>
+                ) : <Button type="submit" size="icon" aria-label="发送任务" disabled={!canSend}><ArrowUp /></Button>}
               </InputGroupAddon>
             </InputGroup>
           </form>
@@ -271,7 +271,7 @@ function ChatMessage({ message, running }: { message: UIMessage; running: boolea
         {message.parts.map((part, index) => {
           if (part.type === "text") {
             return (
-              <Bubble key={index} align={user ? "end" : "start"} variant={user ? "default" : "ghost"} className={user ? "user-bubble" : "agent-bubble"}>
+              <Bubble key={index} align={user ? "end" : "start"} variant={user ? "tinted" : "ghost"} className={user ? "user-bubble" : undefined}>
                 <BubbleContent className="message-text">{part.text}</BubbleContent>
               </Bubble>
             );

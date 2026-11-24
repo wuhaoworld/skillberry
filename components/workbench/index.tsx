@@ -122,10 +122,10 @@ export function Workbench() {
           <Button className="mobile-nav-close" variant="ghost" size="icon" aria-label="关闭侧栏" onClick={() => setMobileMenu(false)}><X /></Button>
         </div>
         <div className="nav-actions">
-          <Button className="new-chat-button" onClick={() => startDraft(project?.id)}>
+          <Button size="lg" onClick={() => startDraft(project?.id)}>
             <SquarePen data-icon="inline-start" />新建对话
           </Button>
-          <Button variant="ghost" className="new-project-button" onClick={() => showProjectForm()}>
+          <Button variant="ghost" size="lg" onClick={() => showProjectForm()}>
             <FolderPlus data-icon="inline-start" />新建项目
           </Button>
         </div>
@@ -191,7 +191,7 @@ export function Workbench() {
         {view.existing && task && <TaskLocation id={task.id} />}
       </main>
       <Dialog open={!!projectForm} onOpenChange={open => { if (!open && !projectForm?.pending) setProjectForm(undefined); }}>
-        <DialogContent showCloseButton={!projectForm?.pending} className="project-dialog">
+        <DialogContent showCloseButton={!projectForm?.pending}>
           <DialogHeader>
             <DialogTitle>新建项目</DialogTitle>
             <DialogDescription>项目中的任务共用一个文件工作区。</DialogDescription>
