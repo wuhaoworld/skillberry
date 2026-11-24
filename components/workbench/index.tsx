@@ -197,7 +197,7 @@ export function Workbench() {
               <ChevronRight className="size-3.5 flex-none" />
               <strong className="truncate font-[550] text-foreground">{task.title}</strong>
             </div>
-          ) : <span className="text-[13px] text-muted-foreground">工作台</span>}
+          ) : null}
         </header>
         {loadError && <div className="px-6.5 text-[13px] text-destructive" role="alert">{loadError} <Button variant="ghost" onClick={() => void refresh()}>重试</Button></div>}
         <Conversation key={view.id} id={view.id} existing={Boolean(view.existing || task)} loaded={loaded}

@@ -202,8 +202,8 @@ export function Conversation(props: Props) {
           </MessageScroller>
         </MessageScrollerProvider>
       ) : (
-        <h1 className="mx-4.5 mt-[clamp(40px,12vh,124px)] text-center font-heading text-[clamp(32px,4vw,46px)]/[1.35] font-semibold tracking-tight">
-          我能为你做什么？
+        <h1 className="mx-4.5 grid flex-1 place-items-center text-center font-heading text-[clamp(24px,3vw,32px)]/[1.35] font-normal tracking-tight">
+          有什么我能帮你的吗？
         </h1>
       )}
       <div className={cn(
@@ -211,14 +211,14 @@ export function Conversation(props: Props) {
         isChat ? "mb-5.5" : "mb-[clamp(22px,5vh,52px)]",
       )}>
         {notice && <p className="mx-1 mb-2 text-[13px] text-destructive" role="status">{notice}</p>}
-        <div className={isChat ? undefined : "rounded-3xl border border-border bg-[#FAFAFA]"}>
+        <div className={isChat ? undefined : "rounded-3xl bg-[#FAFAFA]"}>
           {!isChat && (
             <div className="px-2.75 pt-1.5 pb-1.25">
               <DropdownMenu>
-                <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="max-w-full" />}>
+                <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="max-w-full rounded-full" />}>
                   <Folder data-icon="inline-start" /><span className="truncate">{project?.name ?? "选择项目"}</span><ChevronDown data-icon="inline-end" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" aria-label="选择项目" className="min-w-[min(270px,calc(100vw-34px))]">
+                <DropdownMenuContent side="top" aria-label="选择项目" className="min-w-[min(270px,calc(100vw-34px))] rounded-xl">
                   <DropdownMenuGroup>
                     {props.projects.map(item => (
                       <DropdownMenuItem key={item.id} disabled={item.status !== "ready"} onClick={() => props.onProject(item.id)}>
@@ -235,10 +235,7 @@ export function Conversation(props: Props) {
             </div>
           )}
           <form ref={form} onSubmit={submit}>
-            <InputGroup className={cn(
-              "min-h-[117px] rounded-2xl bg-card text-card-foreground has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-card",
-              !isChat && "-mx-px -mb-px w-[calc(100%+2px)]",
-            )}>
+            <InputGroup className="min-h-[117px] rounded-2xl bg-card text-card-foreground has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-card">
               <InputGroupTextarea aria-label="任务描述"
                 className="max-h-[min(26vh,210px)] min-h-[65px] px-4 pt-3.5 pb-1.5 text-[15px] md:text-[15px]"
                 value={draft} maxLength={20_000}
