@@ -5,6 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, getToolName, type UIMessage } from "ai";
 import { cn } from "cn";
 import { ArrowUp, Check, ChevronDown, FilePenLine, FileText, Folder, LoaderCircle, Plus, Square } from "lucide-react";
+import { Streamdown } from "streamdown";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
@@ -278,6 +279,7 @@ export function Conversation(props: Props) {
 
 function ChatMessage({ message, running }: { message: UIMessage; running: boolean }) {
   const user = message.role === "user";
+  const assistant = message.role === "assistant";
   return (
     <Message align={user ? "end" : "start"}>
       <MessageContent>
@@ -285,7 +287,13 @@ function ChatMessage({ message, running }: { message: UIMessage; running: boolea
           if (part.type === "text") {
             return (
               <Bubble key={index} align={user ? "end" : "start"} variant={user ? "tinted" : "ghost"} className={user ? "max-w-[min(90%,620px)]" : undefined}>
-                <BubbleContent className="text-[15px]/[1.7] wrap-anywhere whitespace-pre-wrap">{part.text}</BubbleContent>
+                <BubbleContent className={cn("text-[15px]/[1.7] wrap-anywhere", !assistant && "whitespace-pre-wrap")}>
+                  {assistant ? (
+                    <Streamdown isAnimating={running && part.state === "streaming"}>
+                      {part.text}
+                    </Streamdown>
+                  ) : part.text}
+                </BubbleContent>
               </Bubble>
             );
           }
