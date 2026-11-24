@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, getToolName, type UIMessage } from "ai";
+import { cn } from "cn";
 import { Archive, ArrowUp, Check, ChevronDown, FilePenLine, FileText, LoaderCircle, Plus, Square } from "lucide-react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -175,21 +176,21 @@ export function Conversation(props: Props) {
 
   const isChat = existing || running;
   return (
-    <section className="conversation" data-chat={isChat} aria-label={isChat ? "任务对话" : "新建对话"}>
+    <section className="relative flex min-h-0 flex-1 flex-col" aria-label={isChat ? "任务对话" : "新建对话"}>
       {isChat ? (
         <MessageScrollerProvider autoScroll defaultScrollPosition="end">
-          <MessageScroller className="transcript">
+          <MessageScroller className="flex-1">
             <MessageScrollerViewport aria-label="对话记录">
-              <MessageScrollerContent className="transcript-content">
-                {loadingHistory && !messages.length && <p className="status-text">正在加载任务记录</p>}
+              <MessageScrollerContent className="mx-auto w-[calc(100%-52px)] max-w-3xl py-5.5 [@media(max-width:680px)]:w-[calc(100%-28px)]">
+                {loadingHistory && !messages.length && <p className="text-[13px] text-muted-foreground">正在加载任务记录</p>}
                 {messages.map((message, index) => (
                   <MessageScrollerItem key={message.id} messageId={message.id}>
                     <ChatMessage message={message} running={running && index === messages.length - 1} />
                   </MessageScrollerItem>
                 ))}
                 {(running || task?.status === "stopped" || task?.status === "failed") && (
-                  <div className="status-text" role="status">
-                    {running && <LoaderCircle className="motion-safe:animate-spin" />}
+                  <div className="flex items-center gap-2 text-[13px] text-muted-foreground" role="status">
+                    {running && <LoaderCircle className="size-3.5 motion-safe:animate-spin" />}
                     {running ? (stopping ? "正在停止" : sending ? stage || "正在准备工作区" : "Agent 正在执行")
                       : task && labels[task.status]}
                   </div>
@@ -199,17 +200,24 @@ export function Conversation(props: Props) {
             <MessageScrollerButton aria-label="滚动到最新消息" />
           </MessageScroller>
         </MessageScrollerProvider>
-      ) : <h1 className="greeting">我能为你做什么？</h1>}
-      <div className="composer-wrap">
-        {notice && <p className="composer-notice" role="status">{notice}</p>}
-        <div className="composer-shell" data-new={!isChat}>
+      ) : (
+        <h1 className="mx-4.5 mt-[clamp(40px,12vh,124px)] text-center font-heading text-[clamp(32px,4vw,46px)]/[1.35] font-semibold tracking-tight">
+          我能为你做什么？
+        </h1>
+      )}
+      <div className={cn(
+        "mx-auto mt-auto w-[calc(100%-52px)] max-w-3xl flex-none text-foreground [@media(max-width:680px)]:w-[calc(100%-28px)]",
+        isChat ? "mb-5.5" : "mb-[clamp(22px,5vh,52px)]",
+      )}>
+        {notice && <p className="mx-1 mb-2 text-[13px] text-destructive" role="status">{notice}</p>}
+        <div className={isChat ? undefined : "rounded-4xl border border-border bg-muted"}>
           {!isChat && (
-            <div className="project-picker-row">
+            <div className="px-2.75 pt-1.5 pb-1.25">
               <DropdownMenu>
-                <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="project-picker" />}>
+                <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="max-w-full" />}>
                   <Archive data-icon="inline-start" /><span className="truncate">{project?.name ?? "选择项目"}</span><ChevronDown data-icon="inline-end" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" aria-label="选择项目" className="project-menu">
+                <DropdownMenuContent side="top" aria-label="选择项目" className="min-w-[min(270px,calc(100vw-34px))]">
                   <DropdownMenuGroup>
                     {props.projects.map(item => (
                       <DropdownMenuItem key={item.id} disabled={item.status !== "ready"} onClick={() => props.onProject(item.id)}>
@@ -226,8 +234,13 @@ export function Conversation(props: Props) {
             </div>
           )}
           <form ref={form} onSubmit={submit}>
-            <InputGroup className="composer">
-              <InputGroupTextarea aria-label="任务描述" className="composer-input" value={draft} maxLength={20_000}
+            <InputGroup className={cn(
+              "min-h-[117px] rounded-3xl bg-card text-card-foreground dark:bg-card",
+              !isChat && "-mx-px -mb-px w-[calc(100%+2px)]",
+            )}>
+              <InputGroupTextarea aria-label="任务描述"
+                className="max-h-[min(26vh,210px)] min-h-[65px] px-4 pt-3.5 pb-1.5 text-[15px] md:text-[15px]"
+                value={draft} maxLength={20_000}
                 placeholder={isChat ? "继续这项任务…" : "描述你想完成的任务"}
                 onChange={event => setDraft(event.target.value)}
                 onKeyDown={event => {
@@ -236,7 +249,7 @@ export function Conversation(props: Props) {
                     form.current?.requestSubmit();
                   }
                 }} />
-              <InputGroupAddon align="block-end" className="composer-actions">
+              <InputGroupAddon align="block-end" className="justify-end px-2.75 pt-1.25 pb-2.75">
                 {task && retryMessage && (
                   <Button type="button" variant="ghost" className="mr-auto"
                     onClick={() => void runPrompt(retryMessage.text, task.runId, task.model, true)}>重试本轮</Button>
@@ -245,7 +258,7 @@ export function Conversation(props: Props) {
                   <DropdownMenuTrigger render={<Button type="button" variant="ghost" disabled={!modelOptions.length} />}>
                     {modelName || "选择模型"}<ChevronDown data-icon="inline-end" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent side="top" align="end" aria-label="选择模型" className="model-menu">
+                  <DropdownMenuContent side="top" align="end" aria-label="选择模型" className="min-w-[190px]">
                     <DropdownMenuRadioGroup value={model ?? ""} onValueChange={setSelectedModel}>
                       {modelOptions.map(item => <DropdownMenuRadioItem key={item.id} value={item.id} closeOnClick>{item.name}</DropdownMenuRadioItem>)}
                     </DropdownMenuRadioGroup>
@@ -271,8 +284,8 @@ function ChatMessage({ message, running }: { message: UIMessage; running: boolea
         {message.parts.map((part, index) => {
           if (part.type === "text") {
             return (
-              <Bubble key={index} align={user ? "end" : "start"} variant={user ? "tinted" : "ghost"} className={user ? "user-bubble" : undefined}>
-                <BubbleContent className="message-text">{part.text}</BubbleContent>
+              <Bubble key={index} align={user ? "end" : "start"} variant={user ? "tinted" : "ghost"} className={user ? "max-w-[min(90%,620px)]" : undefined}>
+                <BubbleContent className="text-[15px]/[1.7] wrap-anywhere whitespace-pre-wrap">{part.text}</BubbleContent>
               </Bubble>
             );
           }
