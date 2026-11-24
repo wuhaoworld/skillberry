@@ -14,7 +14,7 @@ type View = { id: string; projectId?: string; existing?: boolean };
 type ProjectForm = { id: string; name: string; pending: boolean; error?: string };
 
 const initialData: WorkspaceData = { projects: [], tasks: [], models: [] };
-const sidebarItemClassName = "font-normal active:not-aria-[haspopup]:translate-y-0 hover:bg-[#E5E5E5]! dark:hover:text-background!";
+const sidebarItemClassName = "font-normal active:not-aria-[haspopup]:translate-y-0 hover:bg-foreground/4!";
 
 export function Workbench() {
   const [data, setData] = useState(initialData);
@@ -174,7 +174,7 @@ export function Workbench() {
                 <div id={`project-tasks-${item.id}`} hidden={isCollapsed}>
                   {!isCollapsed && projectTasks.map(entry => (
                     <Button key={entry.id} variant="ghost"
-                      className={`mt-0.5 flex w-full justify-start overflow-hidden ps-8.5 aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-primary! ${sidebarItemClassName}`}
+                      className={`mt-0.5 flex w-full justify-start overflow-hidden ps-8.5 aria-[current=page]:bg-foreground/9! aria-[current=page]:hover:bg-foreground/9! ${sidebarItemClassName}`}
                       aria-current={view.id === entry.id ? "page" : undefined}
                       onClick={() => navigate({ id: entry.id, projectId: item.id, existing: true })}>
                       <span className="truncate">{entry.title}</span>
