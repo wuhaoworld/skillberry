@@ -2,19 +2,31 @@ import { consumeStream, createUIMessageStream, createUIMessageStreamResponse, re
 import type { HarnessAgentResumeSessionState, HarnessAgentSession } from "@ai-sdk/harness/agent";
 import { z } from "zod";
 import { availableModels, networkSession, openProject, projectAgent, WorkspaceUnavailable } from "@/lib/server/environment";
+import type { SkillBundle } from "@/lib/server/skill-package";
 import { beginRun, endRun, heartbeat, requestStop, retryableStartupError, saveResponse } from "@/lib/server/store";
 import type { RunStatus } from "@/lib/workbench";
 
 const runKey = z.object({ taskId: z.uuid(), id: z.uuid() });
 const send = runKey.extend({ projectId: z.uuid(), model: z.string(), text: z.string().trim().min(1).max(20_000), retry: z.boolean().optional() });
 const skillCall = z.object({ skill: z.string() });
+const skillFileCall = z.object({ name: z.string(), path: z.string() });
 
-function redact(chunk: UIMessageChunk): UIMessageChunk | undefined {
+function redact(chunk: UIMessageChunk, skills: SkillBundle[]): UIMessageChunk | undefined {
   switch (chunk.type) {
     case "tool-input-start":
       return { type: chunk.type, toolCallId: chunk.toolCallId, toolName: chunk.toolName, dynamic: true };
-    case "tool-input-available":
-      return { type: chunk.type, toolCallId: chunk.toolCallId, toolName: chunk.toolName, input: null, dynamic: true };
+    case "tool-input-available": {
+      let input = null;
+      if (chunk.toolName === "readSkillFile") {
+        const call = skillFileCall.safeParse(chunk.input);
+        if (call.success) {
+          const { name, path } = call.data;
+          const skill = skills.find(skill => skill.name === name);
+          if (skill?.files.some(file => file.path === path)) input = { name, path };
+        }
+      }
+      return { type: chunk.type, toolCallId: chunk.toolCallId, toolName: chunk.toolName, input, dynamic: true };
+    }
     case "tool-output-available": {
       const value = chunk.output;
       if (!value || typeof value !== "object" || !("ok" in value) || value.ok !== true) {
@@ -128,7 +140,7 @@ export async function POST(request: Request) {
                 return;
               }
             }
-            const visible = redact(chunk);
+            const visible = redact(chunk, accepted.skills);
             if (visible) streamController.enqueue(visible);
           },
         })).tee();

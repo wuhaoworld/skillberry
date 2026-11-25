@@ -325,16 +325,25 @@ function ChatMessage({ message, running }: { message: UIMessage; running: boolea
           if (!isToolUIPart(part)) return null;
           const toolName = getToolName(part);
           const writing = toolName === "writeProjectFile";
+          const readingSkill = toolName === "readSkillFile";
           const finished = part.state === "output-available";
           const failed = part.state === "output-error";
           if (toolName === "Skill" && finished) return null;
+          const input = part.input;
+          const skillPath = readingSkill && input && typeof input === "object" &&
+            "name" in input && typeof input.name === "string" && "path" in input && typeof input.path === "string"
+            ? `${input.name}/${input.path}` : null;
+          const description = failed ? "操作未完成" : finished ? "操作完成" : running ? "执行中" : "已中断";
           return (
             <Trace key={part.toolCallId}>
               <TraceLine status={failed ? "error" : finished ? undefined : running ? "running" : "pending"}>
                 <TraceIcon>{writing ? <FilePenLine /> : <FileText />}</TraceIcon>
-                <TraceTitle>{writing ? "写入项目文件" : toolName === "readProjectFile" ? "读取项目文件" :
-                  toolName === "readSkillFile" ? "读取 Skill 资料" : toolName === "Skill" ? "加载 Skill" : "项目操作"}</TraceTitle>
-                <TraceDescription>{finished ? "操作完成" : failed ? "操作未完成" : running ? "执行中" : "已中断"}</TraceDescription>
+                <TraceTitle className={skillPath ? "wrap-anywhere whitespace-normal" : undefined}>
+                  {writing ? "写入项目文件" : toolName === "readProjectFile" ? "读取项目文件" :
+                    readingSkill ? "读取 Skill" : toolName === "Skill" ? "加载 Skill" : "项目操作"}
+                  {skillPath && <> · <code>{skillPath}</code></>}
+                </TraceTitle>
+                {(!readingSkill || failed || (!finished && !running)) && <TraceDescription>{description}</TraceDescription>}
               </TraceLine>
             </Trace>
           );
