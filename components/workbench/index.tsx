@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Tabs } from "@base-ui/react/tabs";
 import Image from "next/image";
 import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, Menu, Plus, SquarePen, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,10 +10,12 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { Project, Workbench as WorkspaceData } from "@/lib/workbench";
 import { Conversation } from "./conversation";
+import { ProjectSkills } from "./project-skills";
 
+type ProjectTab = "conversations" | "skills";
 type View =
   | { id: string; projectId?: string; existing?: boolean; overview?: never }
-  | { id?: never; projectId: string; existing?: never; overview: true };
+  | { id?: never; projectId: string; existing?: never; overview: true; tab?: ProjectTab };
 type ProjectForm = { id: string; name: string; pending: boolean; error?: string };
 
 const initialData: WorkspaceData = { projects: [], tasks: [], models: [] };
@@ -52,8 +55,14 @@ export function Workbench() {
     }
 
     const start = setTimeout(() => {
-      const taskId = new URL(window.location.href).searchParams.get("task");
-      setView({ id: taskId || crypto.randomUUID(), existing: Boolean(taskId) });
+      const params = new URL(window.location.href).searchParams;
+      const taskId = params.get("task");
+      const projectId = params.get("project");
+      if (!taskId && projectId) {
+        setView({ projectId, overview: true, tab: params.get("tab") === "skills" ? "skills" : "conversations" });
+      } else {
+        setView({ id: taskId || crypto.randomUUID(), existing: Boolean(taskId) });
+      }
       void refresh();
     }, 0);
     document.addEventListener("visibilitychange", refreshWhenVisible);
@@ -74,6 +83,10 @@ export function Workbench() {
     const url = new URL(window.location.href);
     if (next.existing) url.searchParams.set("task", next.id);
     else url.searchParams.delete("task");
+    if (next.overview) url.searchParams.set("project", next.projectId);
+    else url.searchParams.delete("project");
+    if (next.overview && next.tab === "skills") url.searchParams.set("tab", "skills");
+    else url.searchParams.delete("tab");
     window.history.replaceState(null, "", url);
     setMobileMenu(false);
   }
@@ -212,11 +225,51 @@ export function Workbench() {
               )}
               <strong className="truncate font-[550] text-foreground">{task.title}</strong>
             </div>
+          ) : view.overview && project ? (
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+              <FolderOpen className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{project.name}</span>
+            </div>
           ) : null}
         </header>
         {loadError && <div className="px-6.5 text-[13px] text-destructive" role="alert">{loadError} <Button variant="ghost" onClick={() => void refresh()}>重试</Button></div>}
-        {view.overview ? (
-          <section className="flex-1" aria-label={`${project?.name ?? "项目"}概览`} />
+        {view.overview ? project ? (
+          <Tabs.Root key={project.id} value={view.tab ?? "conversations"} className="flex min-h-0 flex-1 flex-col"
+            onValueChange={value => navigate({ projectId: project.id, overview: true, tab: value as ProjectTab })}>
+            <Tabs.List aria-label="项目视图" className="flex shrink-0 gap-5 border-b px-6.5 [@media(max-width:680px)]:px-4">
+              {([["conversations", "对话"], ["skills", "Skills"]] as const).map(([value, label]) => (
+                <Tabs.Tab key={value} value={value} className="-mb-px border-b-2 border-transparent px-1 py-2.5 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-active:border-primary data-active:text-foreground">
+                  {label}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+            <Tabs.Panel value="conversations" className="min-h-0 flex-1 overflow-auto px-6.5 py-6 [@media(max-width:680px)]:px-4">
+              <div className="mx-auto grid max-w-5xl gap-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="font-heading text-xl font-semibold tracking-tight">项目对话</h2>
+                  <Button type="button" onClick={() => startDraft(project.id)}><SquarePen data-icon="inline-start" />新建对话</Button>
+                </div>
+                {data.tasks.some(item => item.projectId === project.id) ? (
+                  <ul className="divide-y rounded-xl border">
+                    {data.tasks.filter(item => item.projectId === project.id).map(item => (
+                      <li key={item.id}>
+                        <Button variant="ghost" className="h-11 w-full justify-start gap-2 px-3 font-normal"
+                          onClick={() => navigate({ id: item.id, projectId: project.id, existing: true })}>
+                          <span className="truncate">{item.title}</span><ChevronRight className="ms-auto shrink-0 text-muted-foreground" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="text-sm text-muted-foreground">这个项目还没有对话。</p>}
+              </div>
+            </Tabs.Panel>
+            <Tabs.Panel value="skills" className="min-h-0 flex-1 overflow-auto px-6.5 py-6 [@media(max-width:680px)]:px-4">
+              <div className="mx-auto max-w-5xl">
+                <ProjectSkills projectId={project.id} onChange={refresh} />
+              </div>
+            </Tabs.Panel>
+          </Tabs.Root>
+        ) : (
+          <p className="px-6.5 text-sm text-muted-foreground">{loaded ? "项目不存在。" : "正在加载项目…"}</p>
         ) : (
           <Conversation key={view.id} id={view.id} existing={Boolean(view.existing || task)} loaded={loaded}
             modelOptions={data.models} projects={data.projects} project={project} task={task}

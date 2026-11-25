@@ -1,9 +1,11 @@
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { UIMessage } from "ai";
 import type { HarnessAgentResumeSessionState } from "@ai-sdk/harness/agent";
-import type { Project, RunStatus, Task, TaskDetail } from "@/lib/workbench";
+import type { InstalledSkill, Project, RunStatus, Task, TaskDetail } from "@/lib/workbench";
+import type { SkillBundle } from "./skill-package";
 
 const directory = resolve(/* turbopackIgnore: true */ process.env.SKILLBERRY_DATA_DIR || ".skillberry");
 const leaseDuration = 90_000;
@@ -34,6 +36,21 @@ function openStore() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS one_run_per_project ON runs(projectId) WHERE status = 'running';
     CREATE INDEX IF NOT EXISTS task_runs ON runs(taskId);
+    CREATE TABLE IF NOT EXISTS skill_versions (
+      id TEXT PRIMARY KEY, projectId TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL,
+      digest TEXT NOT NULL, description TEXT NOT NULL, bundle TEXT NOT NULL, fileCount INTEGER NOT NULL,
+      UNIQUE (projectId, name, digest)
+    );
+    CREATE TABLE IF NOT EXISTS skills (
+      projectId TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL,
+      versionId TEXT NOT NULL REFERENCES skill_versions(id), enabled INTEGER NOT NULL,
+      PRIMARY KEY (projectId, name)
+    );
+    CREATE TABLE IF NOT EXISTS run_skills (
+      runId TEXT NOT NULL REFERENCES runs(id), versionId TEXT NOT NULL REFERENCES skill_versions(id),
+      PRIMARY KEY (runId, versionId)
+    );
+    CREATE INDEX IF NOT EXISTS run_skill_versions ON run_skills(versionId);
   `);
   return db;
 }
@@ -63,7 +80,84 @@ function expireRuns() {
 
 export function getProjects() {
   db().prepare("UPDATE projects SET status = 'failed' WHERE status = 'preparing' AND lease < ?").run(Date.now());
-  return db().prepare("SELECT id, name, status, updatedAt FROM projects ORDER BY updatedAt DESC").all() as Project[];
+  type ProjectRow = Omit<Project, "enabledSkills"> & { enabledSkills: string };
+  const rows = db().prepare(`
+    SELECT id, name, status, updatedAt, (
+      SELECT json_group_array(s.name ORDER BY s.name) FROM skills s WHERE s.projectId = p.id AND s.enabled = 1
+    ) AS enabledSkills
+    FROM projects p ORDER BY updatedAt DESC
+  `).all() as ProjectRow[];
+  return rows.map(row => ({ ...row, enabledSkills: JSON.parse(row.enabledSkills) as string[] }));
+}
+
+export function projectExists(projectId: string) {
+  return Boolean(db().prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId));
+}
+
+const skillsQuery = `
+  SELECT s.name, s.versionId, s.enabled, v.description, v.fileCount
+  FROM skills s JOIN skill_versions v ON v.id = s.versionId WHERE s.projectId = ?
+`;
+
+function installedSkill(row: unknown): InstalledSkill {
+  const skill = row as InstalledSkill;
+  return { ...skill, enabled: Boolean(skill.enabled) };
+}
+
+export function getProjectSkills(projectId: string) {
+  return db().prepare(skillsQuery + " ORDER BY s.name").all(projectId).map(installedSkill);
+}
+
+export function getProjectSkill(projectId: string, name: string) {
+  const row = db().prepare(skillsQuery + " AND s.name = ?").get(projectId, name);
+  return row && installedSkill(row);
+}
+
+export function installProjectSkill(projectId: string, bundle: SkillBundle, expectedVersion: string | null) {
+  const { name, description, files } = bundle;
+  const serialized = JSON.stringify(bundle);
+  const digest = createHash("sha256").update(serialized).digest("hex");
+
+  return transaction(() => {
+    const current = getProjectSkill(projectId, name);
+    const existing = db().prepare("SELECT id FROM skill_versions WHERE projectId = ? AND name = ? AND digest = ?")
+      .get(projectId, name, digest);
+    if (current && current.versionId === existing?.id && current.enabled) return current;
+    if ((current?.versionId ?? null) !== expectedVersion) return;
+    const versionId = existing ? String(existing.id) : randomUUID();
+    if (!existing) {
+      db().prepare(`
+        INSERT INTO skill_versions (id, projectId, name, digest, description, bundle, fileCount)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(versionId, projectId, name, digest, description, serialized, files.length + 1);
+    }
+    db().prepare(`
+      INSERT INTO skills (projectId, name, versionId, enabled) VALUES (?, ?, ?, 1)
+      ON CONFLICT(projectId, name) DO UPDATE SET versionId = excluded.versionId, enabled = excluded.enabled
+    `).run(projectId, name, versionId);
+    return getProjectSkill(projectId, name);
+  });
+}
+
+export function setProjectSkillEnabled(projectId: string, name: string, versionId: string, enabled: boolean) {
+  return transaction(() => {
+    const result = db().prepare("UPDATE skills SET enabled = ? WHERE projectId = ? AND name = ? AND versionId = ?")
+      .run(Number(enabled), projectId, name, versionId);
+    return result.changes ? getProjectSkill(projectId, name) : undefined;
+  });
+}
+
+export function deleteProjectSkill(projectId: string, name: string, versionId: string) {
+  return transaction(() => {
+    const result = db().prepare("DELETE FROM skills WHERE projectId = ? AND name = ? AND versionId = ?")
+      .run(projectId, name, versionId);
+    if (!result.changes) return false;
+    db().prepare(`
+      DELETE FROM skill_versions WHERE projectId = ? AND name = ?
+      AND NOT EXISTS (SELECT 1 FROM run_skills WHERE versionId = skill_versions.id)
+    `).run(projectId, name);
+    return true;
+  });
 }
 
 export function beginProject(id: string, name: string) {
@@ -157,8 +251,16 @@ export function beginRun(input: { id: string; taskId: string; projectId: string;
         INSERT INTO runs (id, taskId, projectId, model, status, lease, prompt)
         VALUES (?, ?, ?, ?, 'running', ?, ?)
       `).run(input.id, input.taskId, input.projectId, input.model, now + leaseDuration, input.text);
+      db().prepare(`
+        INSERT INTO run_skills (runId, versionId)
+        SELECT ?, versionId FROM skills WHERE projectId = ? AND enabled = 1
+      `).run(input.id, input.projectId);
     }
-    return { resume: task?.resume ? JSON.parse(String(task.resume)) as HarnessAgentResumeSessionState : undefined };
+    const skills = db().prepare(`
+      SELECT v.bundle FROM run_skills r JOIN skill_versions v ON v.id = r.versionId
+      WHERE r.runId = ? ORDER BY v.name
+    `).all(input.id).map(row => JSON.parse(String(row.bundle)) as SkillBundle);
+    return { skills, resume: task?.resume ? JSON.parse(String(task.resume)) as HarnessAgentResumeSessionState : undefined };
   });
 }
 

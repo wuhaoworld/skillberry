@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, getToolName, type UIMessage } from "ai";
 import { cn } from "cn";
-import { ArrowUp, Check, ChevronDown, FilePenLine, FileText, Folder, LoaderCircle, Plus, Square } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, FilePenLine, FileText, Folder, Layers, LoaderCircle, Plus, Square } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -247,10 +247,29 @@ export function Conversation(props: Props) {
                     form.current?.requestSubmit();
                   }
                 }} />
-              <InputGroupAddon align="block-end" className="justify-end px-2.75 pt-1.25 pb-2.75">
+              <InputGroupAddon align="block-end" className="flex-wrap justify-end px-2.75 pt-1.25 pb-2.75">
                 {task && retryMessage && (
                   <Button type="button" variant="ghost" className="mr-auto"
                     onClick={() => void runPrompt(retryMessage.text, task.runId, task.model, true)}>重试本轮</Button>
+                )}
+                {!!project?.enabledSkills.length && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<Button type="button" variant="ghost" disabled={running} />}
+                      aria-label={`已启用 ${project.enabledSkills.length} 个 Skills`}>
+                      <Layers data-icon="inline-start" />{project.enabledSkills.length} 个 Skills
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="top" align="end" aria-label="已启用的 Skills" className="max-h-64 overflow-y-auto">
+                      <DropdownMenuGroup>
+                        {project.enabledSkills.map(name => (
+                          <DropdownMenuItem key={name} onClick={() => {
+                            const mention = `用 ${name} `;
+                            setDraft(current => current.startsWith(mention) || current.length + mention.length > 20_000
+                              ? current : mention + current);
+                          }}><Layers /><span className="truncate">{name}</span></DropdownMenuItem>
+                        ))}
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger render={<Button type="button" variant="ghost" disabled={!modelOptions.length} />}>
@@ -296,15 +315,25 @@ function ChatMessage({ message, running }: { message: UIMessage; running: boolea
               </Bubble>
             );
           }
+          if (part.type === "data-skill-used" && typeof part.data === "string") {
+            return (
+              <Trace key={index}>
+                <TraceLine><TraceIcon><Layers /></TraceIcon><TraceTitle>已使用 {part.data}</TraceTitle></TraceLine>
+              </Trace>
+            );
+          }
           if (!isToolUIPart(part)) return null;
-          const writing = getToolName(part) === "writeProjectFile";
+          const toolName = getToolName(part);
+          const writing = toolName === "writeProjectFile";
           const finished = part.state === "output-available";
           const failed = part.state === "output-error";
+          if (toolName === "Skill" && finished) return null;
           return (
             <Trace key={part.toolCallId}>
               <TraceLine status={failed ? "error" : finished ? undefined : running ? "running" : "pending"}>
                 <TraceIcon>{writing ? <FilePenLine /> : <FileText />}</TraceIcon>
-                <TraceTitle>{writing ? "写入项目文件" : getToolName(part) === "readProjectFile" ? "读取项目文件" : "项目操作"}</TraceTitle>
+                <TraceTitle>{writing ? "写入项目文件" : toolName === "readProjectFile" ? "读取项目文件" :
+                  toolName === "readSkillFile" ? "读取 Skill 资料" : toolName === "Skill" ? "加载 Skill" : "项目操作"}</TraceTitle>
                 <TraceDescription>{finished ? "操作完成" : failed ? "操作未完成" : running ? "执行中" : "已中断"}</TraceDescription>
               </TraceLine>
             </Trace>

@@ -7,6 +7,7 @@ import type { RunStatus } from "@/lib/workbench";
 
 const runKey = z.object({ taskId: z.uuid(), id: z.uuid() });
 const send = runKey.extend({ projectId: z.uuid(), model: z.string(), text: z.string().trim().min(1).max(20_000), retry: z.boolean().optional() });
+const skillCall = z.object({ skill: z.string() });
 
 function redact(chunk: UIMessageChunk): UIMessageChunk | undefined {
   switch (chunk.type) {
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
   }
 
   const accepted = beginRun(input);
-  if (accepted.error) return new Response(accepted.error, { status: 409 });
+  if (accepted.error !== undefined) return new Response(accepted.error, { status: 409 });
 
   const assistantId = `assistant-${input.id}`;
   const controller = new AbortController();
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
         writer.write({ type: "data-stage", data: "正在准备工作区" });
         const sandbox = await openProject(input.projectId, signal);
         workspaceOpened = true;
-        const agent = projectAgent(sandbox, signal);
+        const agent = projectAgent(sandbox, signal, accepted.skills);
         // A turn can be cancelled while its bridge is still needed to save the session.
         const startup = new AbortController();
         const cancelStartup = () => startup.abort(signal.reason);
@@ -102,6 +103,8 @@ export async function POST(request: Request) {
         const result = await agent.stream({ session, options: { model: input.model }, prompt: input.text, abortSignal: signal });
 
         let lastSave = 0;
+        const skillCalls = new Map<string, string>();
+        const activeSkills = new Set(accepted.skills.map(skill => skill.name));
         const [output, history] = toUIMessageStream({
           stream: result.stream,
           generateMessageId: () => assistantId,
@@ -112,6 +115,19 @@ export async function POST(request: Request) {
           },
         }).pipeThrough(new TransformStream<UIMessageChunk, UIMessageChunk>({
           transform(chunk, streamController) {
+            if (chunk.type === "tool-input-available" && chunk.toolName === "Skill") {
+              const call = skillCall.safeParse(chunk.input);
+              if (call.success && activeSkills.has(call.data.skill)) skillCalls.set(chunk.toolCallId, call.data.skill);
+            }
+            if (chunk.type === "tool-output-available") {
+              const name = skillCalls.get(chunk.toolCallId);
+              if (name) {
+                streamController.enqueue({ type: chunk.type, toolCallId: chunk.toolCallId, output: "操作完成", dynamic: true });
+                streamController.enqueue({ type: "data-skill-used", data: name });
+                skillCalls.delete(chunk.toolCallId);
+                return;
+              }
+            }
             const visible = redact(chunk);
             if (visible) streamController.enqueue(visible);
           },

@@ -5,6 +5,22 @@ export type Project = {
   name: string;
   status: "preparing" | "ready" | "failed" | "unavailable";
   updatedAt: number;
+  enabledSkills: string[];
+};
+
+export const skillZipLimit = 2 * 1024 * 1024;
+
+export type InstalledSkill = {
+  name: string;
+  description: string;
+  versionId: string;
+  enabled: boolean;
+  fileCount: number;
+};
+
+export type SkillPreview = Pick<InstalledSkill, "name" | "description"> & {
+  files: string[];
+  currentVersionId: string | null;
 };
 
 export type RunStatus = "running" | "completed" | "failed" | "stopped";
