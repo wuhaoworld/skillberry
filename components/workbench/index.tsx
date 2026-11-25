@@ -28,6 +28,7 @@ const sidebarItemClassName = `${sidebarItemBaseClassName} hover:bg-foreground/4!
 export function Workbench() {
   const [data, setData] = useState(initialData);
   const [view, setView] = useState<View>({ id: "" });
+  const [showConversationDivider, setShowConversationDivider] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [projectForm, setProjectForm] = useState<ProjectForm>();
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -84,6 +85,7 @@ export function Workbench() {
   }, [hasActiveWork, refresh]);
 
   function navigate(next: View) {
+    if (next.id !== view.id) setShowConversationDivider(false);
     setView(next);
     const url = new URL(window.location.href);
     if (next.existing) url.searchParams.set("task", next.id);
@@ -204,9 +206,9 @@ export function Workbench() {
             <FolderPlus data-icon="inline-start" />新建项目
           </Button>
         </div>
-        <nav className="mt-[27px] overflow-auto [scrollbar-gutter:stable]" aria-label="任务">
-          <h2 className="mx-2.25 mb-2.25 text-xs/[1.5] font-[550] text-muted-foreground">任务</h2>
-          {loaded && !data.projects.length && <p className="mx-2.25 text-xs/[1.65] text-muted-foreground">创建项目后，任务会显示在这里。</p>}
+        <nav className="mt-[27px] overflow-auto scrollbar-none" aria-label="项目">
+          <h2 className="mx-2.25 mb-2.25 text-xs/[1.5] font-[550] text-muted-foreground">项目</h2>
+          {loaded && !data.projects.length && <p className="mx-2.25 text-xs/[1.65] text-muted-foreground">创建的项目会显示在这里。</p>}
           {data.projects.map(item => {
             const isCollapsed = collapsed.has(item.id);
             const projectTasks = data.tasks.filter(entry => entry.projectId === item.id);
@@ -290,7 +292,7 @@ export function Workbench() {
         />
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col">
-        <header className={`flex flex-none items-center gap-2.5 px-6.5 [@media(max-width:680px)]:px-3 ${view.existing ? "h-[46px]" : "h-15.5 [@media(max-width:680px)]:h-13"}`}>
+        <header className={`flex flex-none items-center gap-2.5 pe-6.5 [@media(max-width:680px)]:pe-3 ${view.existing ? "h-[46px] border-b ps-3 [@media(max-width:680px)]:gap-1.5 [@media(max-width:680px)]:ps-2" : "h-15.5 ps-6.5 [@media(max-width:680px)]:h-13 [@media(max-width:680px)]:ps-3"} ${showConversationDivider && view.existing ? "border-border" : "border-transparent"}`}>
           <Button className="hidden [@media(max-width:680px)]:inline-flex" variant="ghost" size="icon" aria-label="打开侧栏" onClick={() => setMobileMenu(true)}><Menu /></Button>
           {view.existing && task ? (
             <div className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
@@ -355,6 +357,7 @@ export function Workbench() {
           <Conversation key={view.id} id={view.id} existing={Boolean(view.existing || task)} loaded={loaded}
             modelOptions={data.models} projects={data.projects} project={project} task={task}
             busy={data.tasks.some(item => item.projectId === project?.id && item.id !== view.id && item.status === "running")}
+            onScrolledPastTop={setShowConversationDivider}
             onProject={id => setView(previous => ({ ...previous, projectId: id }))}
             onNewProject={showProjectForm}
             onManageSkills={projectId => navigate({ projectId, overview: true, tab: "skills" })}

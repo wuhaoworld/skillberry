@@ -31,6 +31,7 @@ type Props = {
   project?: Project;
   task?: Task;
   busy: boolean;
+  onScrolledPastTop: (scrolled: boolean) => void;
   onProject: (id: string) => void;
   onNewProject: () => void;
   onManageSkills: (projectId: string) => void;
@@ -200,7 +201,8 @@ export function Conversation(props: Props) {
       {isChat ? (
         <MessageScrollerProvider autoScroll defaultScrollPosition="end">
           <MessageScroller className="absolute inset-0">
-            <MessageScrollerViewport aria-label="对话记录">
+            <MessageScrollerViewport aria-label="对话记录"
+              onScroll={event => props.onScrolledPastTop(event.currentTarget.scrollTop >= 10)}>
               <MessageScrollerContent className="mx-auto w-[calc(100%-52px)] max-w-3xl pt-5.5 [@media(max-width:680px)]:w-[calc(100%-28px)]">
                 {loadingHistory && !messages.length && <p className="text-[13px] text-muted-foreground">正在加载任务记录</p>}
                 {messages.map((message, index) => (
