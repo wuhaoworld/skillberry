@@ -7,7 +7,9 @@ const fileLimit = 256 * 1024;
 const unpackedLimit = 5 * 1024 * 1024;
 const maxFiles = 50;
 const maxEntries = 100;
-const supportedFile = /\.(md|txt|json|ya?ml|csv|tsv|xml|toml)$/i;
+const textFile = /\.(md|txt|json|ya?ml|csv|tsv|xml|toml)$/i;
+const sourceFile = /\.(py|pyw|sh|bash|zsh|fish|ps1|bat|cmd|[cm]?js|[cm]?ts|jsx|tsx|rb|lua|pl|php|r|go|rs|java|kt|kts|swift|c|cc|cpp|h|hpp|cs|scala|sql|awk|html?|css|scss|less|vue|svelte)$/i;
+const buildFile = /^(makefile|gnumakefile|dockerfile|cmakelists\.txt)$/i;
 const runtimeFile = /^(skill\.md|claude\.md|claude\.local\.md|mcp\.json|settings\.json|settings\.local\.json)$/i;
 const dynamicCommand = /!\x60|\x60{3,}!|~{3,}!/;
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
@@ -93,11 +95,13 @@ async function readArchive(bytes: Buffer) {
       if (entries.has(key)) throw new SkillUploadError(`ZIP 中存在重名条目 ${path}。`);
       entries.set(key, directory);
       if (parts[0] === "__MACOSX" || parts.at(-1) === ".DS_Store") continue;
-      if (parts.some(part => part.startsWith(".") || part.toLowerCase() === "scripts")) {
-        throw new SkillUploadError(`${path} 位于隐藏目录或脚本目录中。`);
+      if (parts.some(part => part.startsWith("."))) {
+        throw new SkillUploadError(`${path} 是隐藏文件或位于隐藏目录中。`);
       }
       if (directory) continue;
-      if (!supportedFile.test(path)) throw new SkillUploadError(`${path} 不是支持的文本文件。`);
+      if (!textFile.test(path) && !sourceFile.test(path) && !buildFile.test(parts.at(-1)!)) {
+        throw new SkillUploadError(`${path} 不是支持的文本或源码文件。`);
+      }
       total += entry.uncompressedSize;
       if (files.size >= maxFiles || total > unpackedLimit || entry.uncompressedSize > fileLimit) {
         throw new SkillUploadError(`${path} 超出了文件数量或解压大小限制。`, 413);
@@ -153,7 +157,7 @@ function parseBundle(files: Map<string, string>): SkillBundle {
     throw new SkillUploadError("SKILL.md 的描述含有无效字符。");
   }
   if (dynamicCommand.test(sections[2]) || dynamicCommand.test(description)) {
-    throw new SkillUploadError("SKILL.md 含有动态命令语法，文本型 Skill 不支持该语法。");
+    throw new SkillUploadError("SKILL.md 不支持在加载时执行动态命令。请将代码作为独立文件打包。");
   }
   const prefix = manifest.slice(0, -"SKILL.md".length);
   if (prefix && prefix !== `${name}/`) throw new SkillUploadError("Skill 文件夹名称需要与 SKILL.md 的 name 一致。");
@@ -161,7 +165,7 @@ function parseBundle(files: Map<string, string>): SkillBundle {
     .filter(([path]) => path !== manifest)
     .map(([path, content]) => {
       if (!path.startsWith(prefix) || runtimeFile.test(path.split("/").at(-1)!)) {
-        throw new SkillUploadError(`${path} 必须是 Skill 目录里的参考资料或模板。`);
+        throw new SkillUploadError(`${path} 必须是 Skill 目录中的普通内容文件。`);
       }
       return { path: path.slice(prefix.length), content };
     })
