@@ -8,7 +8,7 @@ import type { Model } from "@/lib/workbench";
 import type { SkillBundle } from "./skill-package";
 
 const workDir = "workspace";
-const sandboxIdleTimeout = 30 * 60_000;
+export const sandboxIdleTimeout = 30 * 60_000;
 const sandboxActivity = new Map<string, Promise<Sandbox>>();
 const luna: Model = { id: "openai/gpt-6-luna", name: "GPT-6 Luna" };
 const claudeModels: Model[] = [
@@ -40,7 +40,11 @@ export async function provisionProject(projectId: string) {
 
 export class WorkspaceUnavailable extends Error {}
 
-export function keepProjectAwake(projectId: string, signal: AbortSignal, resume = true) {
+export function keepProjectAwake(
+  projectId: string,
+  signal: AbortSignal,
+  { resume = true, activityAt }: { resume?: boolean; activityAt?: number } = {},
+) {
   // Read the deadline after any concurrent renewal, since extendTimeout adds to it.
   const previous = sandboxActivity.get(projectId);
   const activity = (async () => {
@@ -53,7 +57,7 @@ export function keepProjectAwake(projectId: string, signal: AbortSignal, resume 
     const expiresAt = sandbox.expiresAt?.getTime();
     const now = Date.now();
     if (expiresAt !== undefined && expiresAt > now && sandbox.status === "running") {
-      const extension = now + sandboxIdleTimeout - expiresAt;
+      const extension = (activityAt ?? now) + sandboxIdleTimeout - expiresAt;
       if (extension > 0) {
         try {
           await sandbox.currentSession().extendTimeout(extension, { signal });

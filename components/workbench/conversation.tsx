@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/message-scroller";
 import { Trace, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import type { Model, Project, Task, Workbench } from "@/lib/workbench";
+import { SkillPicker } from "./skill-picker";
 
 type Props = {
   id: string;
@@ -32,6 +33,7 @@ type Props = {
   busy: boolean;
   onProject: (id: string) => void;
   onNewProject: () => void;
+  onManageSkills: (projectId: string) => void;
   onAccepted: (id: string, projectId: string) => void;
   refresh: () => Promise<void>;
 };
@@ -252,24 +254,14 @@ export function Conversation(props: Props) {
                   <Button type="button" variant="ghost" className="mr-auto"
                     onClick={() => void runPrompt(retryMessage.text, task.runId, task.model, true)}>重试本轮</Button>
                 )}
-                {!!project?.enabledSkills.length && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button type="button" variant="ghost" disabled={running} />}
-                      aria-label={`已启用 ${project.enabledSkills.length} 个 Skills`}>
-                      <Layers data-icon="inline-start" />{project.enabledSkills.length} 个 Skills
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent side="top" align="end" aria-label="已启用的 Skills" className="max-h-64 overflow-y-auto">
-                      <DropdownMenuGroup>
-                        {project.enabledSkills.map(name => (
-                          <DropdownMenuItem key={name} onClick={() => {
-                            const mention = `用 ${name} `;
-                            setDraft(current => current.startsWith(mention) || current.length + mention.length > 20_000
-                              ? current : mention + current);
-                          }}><Layers /><span className="truncate">{name}</span></DropdownMenuItem>
-                        ))}
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                {project && (
+                  <SkillPicker key={project.id} project={project} disabled={running}
+                    onManage={() => props.onManageSkills(project.id)}
+                    onSelect={name => {
+                      const mention = `用 ${name} `;
+                      setDraft(current => current.startsWith(mention) || current.length + mention.length > 20_000
+                        ? current : mention + current);
+                    }} />
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger render={<Button type="button" variant="ghost" disabled={!modelOptions.length} />}>

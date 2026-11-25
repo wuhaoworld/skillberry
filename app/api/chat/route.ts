@@ -201,7 +201,7 @@ export async function POST(request: Request) {
         if (workspaceOpened) {
           after(async () => {
             try {
-              await keepProjectAwake(input.projectId, AbortSignal.timeout(10_000), false);
+              await keepProjectAwake(input.projectId, AbortSignal.timeout(10_000), { resume: false });
             } catch (cause) {
               console.warn("Could not renew sandbox after task", cause instanceof Error ? cause.name : "Unknown");
             }

@@ -19,7 +19,7 @@ type View =
 type ProjectForm = { id: string; name: string; pending: boolean; error?: string };
 
 const initialData: WorkspaceData = { projects: [], tasks: [], models: [] };
-const sandboxActivityInterval = 10_000;
+const sandboxActivityInterval = 5 * 60_000;
 const sidebarItemBaseClassName = "font-normal active:not-aria-[haspopup]:translate-y-0";
 const sidebarItemClassName = `${sidebarItemBaseClassName} hover:bg-foreground/4!`;
 
@@ -99,41 +99,43 @@ export function Workbench() {
   const task = data.tasks.find(item => item.id === view.id);
   const project = data.projects.find(item => item.id === (task?.projectId ?? view.projectId));
   const readyProjectId = project?.status === "ready" ? project.id : undefined;
-  const sandboxView = view.overview ? view.tab ?? "conversations" : view.id;
 
   useEffect(() => {
     if (!readyProjectId) return;
     const endpoint = `/api/projects/${readyProjectId}/sandbox`;
     let lastRequest = -Infinity;
+    let lastActivity = 0;
     let pendingActivity: number | undefined;
 
     function reportActivity() {
-      window.clearTimeout(pendingActivity);
       pendingActivity = undefined;
-      if (document.hidden) return;
       lastRequest = performance.now();
-      void fetch(endpoint, { method: "POST" }).catch(() => {});
+      // Measure idle time from the interaction, even if reporting it was delayed.
+      const age = Math.floor(lastRequest - lastActivity);
+      void fetch(`${endpoint}?activityAgeMs=${age}`, { method: "POST" }).catch(() => {});
     }
 
     function queueActivity() {
-      if (document.hidden || pendingActivity !== undefined) return;
-      const wait = Math.max(0, lastRequest + sandboxActivityInterval - performance.now());
+      if (document.hidden) return;
+      lastActivity = performance.now();
+      if (pendingActivity !== undefined) return;
+      const wait = Math.max(0, lastRequest + sandboxActivityInterval - lastActivity);
       pendingActivity = window.setTimeout(reportActivity, wait);
     }
 
     queueActivity();
-    document.addEventListener("visibilitychange", reportActivity);
+    document.addEventListener("visibilitychange", queueActivity);
     window.addEventListener("pointerdown", queueActivity);
     window.addEventListener("keydown", queueActivity);
     window.addEventListener("wheel", queueActivity, { passive: true });
     return () => {
       window.clearTimeout(pendingActivity);
-      document.removeEventListener("visibilitychange", reportActivity);
+      document.removeEventListener("visibilitychange", queueActivity);
       window.removeEventListener("pointerdown", queueActivity);
       window.removeEventListener("keydown", queueActivity);
       window.removeEventListener("wheel", queueActivity);
     };
-  }, [readyProjectId, sandboxView]);
+  }, [readyProjectId]);
 
   function toggleProject(id: string) {
     setCollapsed(previous => {
@@ -313,6 +315,7 @@ export function Workbench() {
             busy={data.tasks.some(item => item.projectId === project?.id && item.id !== view.id && item.status === "running")}
             onProject={id => setView(previous => ({ ...previous, projectId: id }))}
             onNewProject={showProjectForm}
+            onManageSkills={projectId => navigate({ projectId, overview: true, tab: "skills" })}
             onAccepted={(id, projectId) => {
               setView(previous => {
                 if (previous.id !== id) return previous;
