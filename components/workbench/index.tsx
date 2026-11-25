@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Tabs } from "@base-ui/react/tabs";
 import Image from "next/image";
 import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, Menu, Plus, SquarePen, X } from "lucide-react";
@@ -20,6 +20,8 @@ type ProjectForm = { id: string; name: string; pending: boolean; error?: string 
 
 const initialData: WorkspaceData = { projects: [], tasks: [], models: [] };
 const sandboxActivityInterval = 5 * 60_000;
+const minSidebarWidth = 220;
+const maxSidebarWidth = 500;
 const sidebarItemBaseClassName = "font-normal active:not-aria-[haspopup]:translate-y-0";
 const sidebarItemClassName = `${sidebarItemBaseClassName} hover:bg-foreground/4!`;
 
@@ -29,6 +31,8 @@ export function Workbench() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [projectForm, setProjectForm] = useState<ProjectForm>();
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(250);
+  const sidebarDrag = useRef<{ x: number; width: number }>(null);
   const [loadError, setLoadError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const refreshVersion = useRef(0);
@@ -94,6 +98,10 @@ export function Workbench() {
 
   function startDraft(projectId?: string) {
     navigate({ id: crypto.randomUUID(), projectId });
+  }
+
+  function resizeSidebar(width: number) {
+    setSidebarWidth(Math.min(maxSidebarWidth, Math.max(minSidebarWidth, width)));
   }
 
   const task = data.tasks.find(item => item.id === view.id);
@@ -173,14 +181,15 @@ export function Workbench() {
   }
 
   return (
-    <div className="grid h-dvh grid-cols-[250px_minmax(0,1fr)] overflow-hidden bg-background [@media(max-width:680px)]:grid-cols-1">
+    <div className="grid h-dvh grid-cols-[var(--sidebar-width)_minmax(0,1fr)] overflow-hidden bg-background [@media(max-width:680px)]:grid-cols-1"
+      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
       {mobileMenu && (
         <button className="fixed inset-0 z-19 hidden bg-foreground/25 [@media(max-width:680px)]:block"
           tabIndex={-1} aria-label="关闭侧栏遮罩" onClick={() => setMobileMenu(false)} />
       )}
       <aside
-        className="flex min-h-0 flex-col border-e border-sidebar-border bg-sidebar px-4 py-5.5 text-sidebar-foreground [@media(max-width:680px)]:invisible [@media(max-width:680px)]:fixed [@media(max-width:680px)]:inset-y-0 [@media(max-width:680px)]:left-0 [@media(max-width:680px)]:z-20 [@media(max-width:680px)]:w-[min(280px,85vw)] [@media(max-width:680px)]:-translate-x-full [@media(max-width:680px)]:data-open:visible [@media(max-width:680px)]:data-open:translate-x-0"
-        data-open={mobileMenu ? "" : undefined} aria-label="项目和任务"
+        className="relative flex min-h-0 flex-col border-e border-sidebar-border bg-sidebar px-4 py-5.5 text-sidebar-foreground [@media(max-width:680px)]:invisible [@media(max-width:680px)]:fixed [@media(max-width:680px)]:inset-y-0 [@media(max-width:680px)]:left-0 [@media(max-width:680px)]:z-20 [@media(max-width:680px)]:w-[min(280px,85vw)] [@media(max-width:680px)]:-translate-x-full [@media(max-width:680px)]:data-open:visible [@media(max-width:680px)]:data-open:translate-x-0"
+        id="workbench-sidebar" data-open={mobileMenu ? "" : undefined} aria-label="项目和任务"
       >
         <div className="mx-1.5 mb-7 flex items-center gap-2.5 text-xl/[1.5] font-[650] tracking-[-0.045em]">
           <Image src="/skillberry.svg" width={34} height={34} alt="" />
@@ -203,30 +212,35 @@ export function Workbench() {
             const projectTasks = data.tasks.filter(entry => entry.projectId === item.id);
             return (
               <div key={item.id} className="py-0.5">
-                <div className="flex min-w-0 items-center">
-                  <div className="group/project relative min-w-0 flex-1 rounded-lg hover:bg-foreground/4">
-                    <Button variant="ghost"
-                      className={`w-full justify-start gap-2 overflow-hidden hover:bg-transparent! aria-[current=page]:bg-foreground/9! aria-[current=page]:hover:bg-foreground/9! ${sidebarItemBaseClassName}`}
-                      aria-current={view.overview && view.projectId === item.id ? "page" : undefined}
-                      onClick={() => navigate({ projectId: item.id, overview: true })}>
-                      <span className="flex-none group-hover/project:opacity-0 group-has-[:focus-visible]/project:opacity-0 [@media(hover:none)]:opacity-0" aria-hidden="true">
-                        {isCollapsed ? <Folder /> : <FolderOpen />}
-                      </span>
-                      <span className="truncate">{item.name}</span>
-                      {item.status === "preparing" && <small className="ms-auto text-muted-foreground">准备中</small>}
-                      {item.status === "unavailable" && <small className="ms-auto text-muted-foreground">不可用</small>}
-                    </Button>
-                    <Button variant="ghost" size="icon-xs"
-                      className="absolute inset-s-1.75 top-1 opacity-0 transition-none active:translate-none! aria-expanded:bg-transparent group-hover/project:opacity-100 group-has-[:focus-visible]/project:opacity-100 hover:bg-foreground/9! [@media(hover:none)]:opacity-100"
-                      aria-label={`${isCollapsed ? "展开" : "收起"} ${item.name}`}
-                      aria-expanded={!isCollapsed} aria-controls={`project-tasks-${item.id}`}
-                      onClick={() => toggleProject(item.id)}>
-                      {isCollapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+                <div className="group/project relative flex min-w-0 items-center rounded-lg hover:bg-foreground/4">
+                  <Button variant="ghost"
+                    className={`w-full min-w-0 justify-start gap-2 overflow-hidden hover:bg-transparent! aria-[current=page]:bg-foreground/9! aria-[current=page]:hover:bg-foreground/9! ${item.status === "failed" ? "pe-20" : "pe-9"} ${sidebarItemBaseClassName}`}
+                    aria-current={view.overview && view.projectId === item.id ? "page" : undefined}
+                    onClick={() => navigate({ projectId: item.id, overview: true })}>
+                    <span className="flex-none group-hover/project:opacity-0 group-has-[:focus-visible]/project:opacity-0 [@media(hover:none)]:opacity-0" aria-hidden="true">
+                      {isCollapsed ? <Folder /> : <FolderOpen />}
+                    </span>
+                    <span className="truncate">{item.name}</span>
+                    {item.status === "preparing" && <small className="ms-auto text-muted-foreground">准备中</small>}
+                    {item.status === "unavailable" && <small className="ms-auto text-muted-foreground">不可用</small>}
+                  </Button>
+                  <Button variant="ghost" size="icon-xs"
+                    className="absolute inset-s-1.75 top-1 opacity-0 transition-none active:translate-none! aria-expanded:bg-transparent group-hover/project:opacity-100 group-has-[:focus-visible]/project:opacity-100 hover:bg-foreground/9! [@media(hover:none)]:opacity-100"
+                    aria-label={`${isCollapsed ? "展开" : "收起"} ${item.name}`}
+                    aria-expanded={!isCollapsed} aria-controls={`project-tasks-${item.id}`}
+                    onClick={() => toggleProject(item.id)}>
+                    {isCollapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+                  </Button>
+                  <div className="absolute inset-e-1 top-1 flex items-center gap-0.5">
+                    {item.status === "failed" && (
+                      <Button variant="ghost" size="xs" aria-label={`重试创建 ${item.name}`} onClick={() => showProjectForm(item)}>重试</Button>
+                    )}
+                    <Button variant="ghost" size="icon-xs" aria-label={`在 ${item.name} 中新建对话`} title="在此项目中新建对话"
+                      className="pointer-events-none opacity-0 transition-none active:translate-none! group-hover/project:pointer-events-auto group-hover/project:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-foreground/9! [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+                      onClick={() => startDraft(item.id)}>
+                      <Plus className="size-4" />
                     </Button>
                   </div>
-                  {item.status === "failed" && (
-                    <Button variant="ghost" size="xs" aria-label={`重试创建 ${item.name}`} onClick={() => showProjectForm(item)}>重试</Button>
-                  )}
                 </div>
                 <div id={`project-tasks-${item.id}`} inert={isCollapsed}
                   className={`grid transition-[grid-template-rows] duration-200 ease-in-out motion-reduce:transition-none ${isCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}>
@@ -246,6 +260,34 @@ export function Workbench() {
             );
           })}
         </nav>
+        <div role="separator" tabIndex={0} aria-label="调整侧栏宽度" aria-controls="workbench-sidebar"
+          aria-orientation="vertical" aria-valuemin={minSidebarWidth} aria-valuemax={maxSidebarWidth} aria-valuenow={sidebarWidth}
+          className="absolute inset-y-0 -end-1 z-10 w-2 cursor-col-resize touch-none select-none outline-none before:absolute before:inset-y-0 before:left-1/2 before:w-0.5 hover:before:bg-sidebar-ring focus-visible:before:bg-sidebar-ring active:before:bg-sidebar-ring [@media(max-width:680px)]:hidden"
+          onPointerDown={event => {
+            if (event.button !== 0 || !event.isPrimary) return;
+            event.preventDefault();
+            sidebarDrag.current = { x: event.clientX, width: sidebarWidth };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={event => {
+            const drag = sidebarDrag.current;
+            if (drag && event.currentTarget.hasPointerCapture(event.pointerId)) {
+              resizeSidebar(drag.width + event.clientX - drag.x);
+            }
+          }}
+          onLostPointerCapture={() => { sidebarDrag.current = null; }}
+          onKeyDown={event => {
+            const width = {
+              ArrowLeft: sidebarWidth - 10,
+              ArrowRight: sidebarWidth + 10,
+              Home: minSidebarWidth,
+              End: maxSidebarWidth,
+            }[event.key];
+            if (width === undefined) return;
+            event.preventDefault();
+            resizeSidebar(width);
+          }}
+        />
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col">
         <header className={`flex flex-none items-center gap-2.5 px-6.5 [@media(max-width:680px)]:px-3 ${view.existing ? "h-[46px]" : "h-15.5 [@media(max-width:680px)]:h-13"}`}>

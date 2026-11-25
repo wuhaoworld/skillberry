@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, getToolName, type UIMessage } from "ai";
 import { cn } from "cn";
@@ -62,6 +62,8 @@ export function Conversation(props: Props) {
   const accepted = useRef(false);
   const requestKey = useRef<{ text: string; projectId: string; model: string; id: string }>(null);
   const form = useRef<HTMLFormElement>(null);
+  const section = useRef<HTMLElement>(null);
+  const composer = useRef<HTMLDivElement>(null);
   const { messages, sendMessage, status, error, clearError, setMessages } = useChat({
     id,
     transport,
@@ -77,6 +79,7 @@ export function Conversation(props: Props) {
 
   const sending = status === "submitted" || status === "streaming" || Boolean(pendingRun);
   const running = sending || task?.status === "running";
+  const isChat = existing || running;
   const runId = pendingRun || task?.runId;
   const stopping = Boolean(runId && (stoppingRun === runId || task?.stopping && task.runId === runId));
   const model = selectedModel || (modelOptions.some(item => item.id === task?.model) ? task?.model : modelOptions[0]?.id);
@@ -106,6 +109,21 @@ export function Conversation(props: Props) {
     const interval = lastStatus === "running" ? setInterval(() => { void load(); }, 1_500) : undefined;
     return () => { controller.abort(); clearInterval(interval); };
   }, [id, existing, sending, lastStatus, lastRun, setMessages]);
+
+  useLayoutEffect(() => {
+    const container = section.current;
+    const footer = composer.current;
+    if (!isChat || !container || !footer) return;
+
+    const updateHeight = () => {
+      container.style.setProperty("--composer-height", `${footer.offsetHeight}px`);
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, [isChat]);
 
   async function runPrompt(text: string, key: string, modelId: string, retry = false) {
     if (!project) return;
@@ -177,14 +195,13 @@ export function Conversation(props: Props) {
     : selectedModel && !modelName ? "该模型当前不可用，请重新选择。"
     : error?.message || task?.error || "");
 
-  const isChat = existing || running;
   return (
-    <section className="relative flex min-h-0 flex-1 flex-col" aria-label={isChat ? "任务对话" : "新建对话"}>
+    <section ref={section} className="relative isolate flex min-h-0 flex-1 flex-col" aria-label={isChat ? "任务对话" : "新建对话"}>
       {isChat ? (
         <MessageScrollerProvider autoScroll defaultScrollPosition="end">
-          <MessageScroller className="flex-1">
+          <MessageScroller className="absolute inset-0">
             <MessageScrollerViewport aria-label="对话记录">
-              <MessageScrollerContent className="mx-auto w-[calc(100%-52px)] max-w-3xl py-5.5 [@media(max-width:680px)]:w-[calc(100%-28px)]">
+              <MessageScrollerContent className="mx-auto w-[calc(100%-52px)] max-w-3xl pt-5.5 [@media(max-width:680px)]:w-[calc(100%-28px)]">
                 {loadingHistory && !messages.length && <p className="text-[13px] text-muted-foreground">正在加载任务记录</p>}
                 {messages.map((message, index) => (
                   <MessageScrollerItem key={message.id} messageId={message.id}>
@@ -198,9 +215,11 @@ export function Conversation(props: Props) {
                       : task && labels[task.status]}
                   </div>
                 )}
+                {/* Keep the scroller following the bottom when the composer grows. */}
+                <div aria-hidden="true" className="h-[calc(var(--composer-height,139px)+0.5rem)] shrink-0" />
               </MessageScrollerContent>
             </MessageScrollerViewport>
-            <MessageScrollerButton aria-label="滚动到最新消息" />
+            <MessageScrollerButton aria-label="滚动到最新消息" className="data-[direction=end]:bottom-[calc(var(--composer-height,139px)+0.75rem)]" />
           </MessageScroller>
         </MessageScrollerProvider>
       ) : (
@@ -208,9 +227,9 @@ export function Conversation(props: Props) {
           有什么我能帮你的吗？
         </h1>
       )}
-      <div className={cn(
+      <div ref={composer} className={cn(
         "mx-auto mt-auto w-[calc(100%-52px)] max-w-3xl flex-none text-foreground [@media(max-width:680px)]:w-[calc(100%-28px)]",
-        isChat ? "mb-5.5" : "mb-[clamp(22px,5vh,52px)]",
+        isChat ? "relative z-1 bg-background pb-5.5" : "mb-[clamp(22px,5vh,52px)]",
       )}>
         {notice && <p className="mx-1 mb-2 text-[13px] text-destructive" role="status">{notice}</p>}
         <div className={isChat ? undefined : "rounded-3xl bg-[#FAFAFA]"}>
