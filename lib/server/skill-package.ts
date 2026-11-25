@@ -21,6 +21,9 @@ const frontmatter = z.object({
   license: z.string().optional(),
   compatibility: z.string().max(500).optional(),
   metadata: z.record(z.string(), z.string()).optional(),
+  version: z.union([z.string(), z.number()]).optional(),
+  author: z.string().optional(),
+  "allowed-tools": z.union([z.string(), z.array(z.string())]).optional(),
 }).strict();
 
 export type SkillBundle = {
@@ -150,7 +153,8 @@ function parseBundle(files: Map<string, string>): SkillBundle {
     throw new SkillUploadError("SKILL.md 的 YAML 元数据无效。");
   }
   const parsed = frontmatter.safeParse(metadata);
-  if (!parsed.success) throw new SkillUploadError("请检查 Skill 名称和描述，并移除工具授权或运行时配置字段。");
+  if (!parsed.success) throw new SkillUploadError("请检查 Skill 名称、描述和元数据格式，并移除不受支持的字段。");
+  // Keep upload-only metadata, including tool declarations, out of the runtime bundle.
   const { name } = parsed.data;
   const description = parsed.data.description.replace(/\s+/g, " ");
   if (/[\u0000-\u001f\u007f-\u009f]/.test(description)) {
