@@ -19,6 +19,7 @@ type View =
 type ProjectForm = { id: string; name: string; pending: boolean; error?: string };
 
 const initialData: WorkspaceData = { projects: [], tasks: [], models: [] };
+const sandboxActivityInterval = 10_000;
 const sidebarItemBaseClassName = "font-normal active:not-aria-[haspopup]:translate-y-0";
 const sidebarItemClassName = `${sidebarItemBaseClassName} hover:bg-foreground/4!`;
 
@@ -97,6 +98,42 @@ export function Workbench() {
 
   const task = data.tasks.find(item => item.id === view.id);
   const project = data.projects.find(item => item.id === (task?.projectId ?? view.projectId));
+  const readyProjectId = project?.status === "ready" ? project.id : undefined;
+  const sandboxView = view.overview ? view.tab ?? "conversations" : view.id;
+
+  useEffect(() => {
+    if (!readyProjectId) return;
+    const endpoint = `/api/projects/${readyProjectId}/sandbox`;
+    let lastRequest = -Infinity;
+    let pendingActivity: number | undefined;
+
+    function reportActivity() {
+      window.clearTimeout(pendingActivity);
+      pendingActivity = undefined;
+      if (document.hidden) return;
+      lastRequest = performance.now();
+      void fetch(endpoint, { method: "POST" }).catch(() => {});
+    }
+
+    function queueActivity() {
+      if (document.hidden || pendingActivity !== undefined) return;
+      const wait = Math.max(0, lastRequest + sandboxActivityInterval - performance.now());
+      pendingActivity = window.setTimeout(reportActivity, wait);
+    }
+
+    queueActivity();
+    document.addEventListener("visibilitychange", reportActivity);
+    window.addEventListener("pointerdown", queueActivity);
+    window.addEventListener("keydown", queueActivity);
+    window.addEventListener("wheel", queueActivity, { passive: true });
+    return () => {
+      window.clearTimeout(pendingActivity);
+      document.removeEventListener("visibilitychange", reportActivity);
+      window.removeEventListener("pointerdown", queueActivity);
+      window.removeEventListener("keydown", queueActivity);
+      window.removeEventListener("wheel", queueActivity);
+    };
+  }, [readyProjectId, sandboxView]);
 
   function toggleProject(id: string) {
     setCollapsed(previous => {

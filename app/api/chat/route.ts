@@ -1,7 +1,8 @@
 import { consumeStream, createUIMessageStream, createUIMessageStreamResponse, readUIMessageStream, toUIMessageStream, type UIMessage, type UIMessageChunk } from "ai";
 import type { HarnessAgentResumeSessionState, HarnessAgentSession } from "@ai-sdk/harness/agent";
+import { after } from "next/server";
 import { z } from "zod";
-import { availableModels, networkSession, openProject, projectAgent, WorkspaceUnavailable } from "@/lib/server/environment";
+import { availableModels, keepProjectAwake, networkSession, openProject, projectAgent, WorkspaceUnavailable } from "@/lib/server/environment";
 import type { SkillBundle } from "@/lib/server/skill-package";
 import { beginRun, endRun, heartbeat, requestStop, retryableStartupError, saveResponse } from "@/lib/server/store";
 import type { RunStatus } from "@/lib/workbench";
@@ -197,6 +198,15 @@ export async function POST(request: Request) {
         clearInterval(timer);
         if (latest?.parts.length) saveResponse(input.id, latest);
         endRun({ ...input, status, error, resume, contextLost, workspaceLost });
+        if (workspaceOpened) {
+          after(async () => {
+            try {
+              await keepProjectAwake(input.projectId, AbortSignal.timeout(10_000), false);
+            } catch (cause) {
+              console.warn("Could not renew sandbox after task", cause instanceof Error ? cause.name : "Unknown");
+            }
+          });
+        }
         writer.write({ type: "data-stage", data: status === "stopped" ? "已停止" : error || "已完成" });
       }
     },

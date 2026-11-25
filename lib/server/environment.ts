@@ -8,6 +8,8 @@ import type { Model } from "@/lib/workbench";
 import type { SkillBundle } from "./skill-package";
 
 const workDir = "workspace";
+const sandboxIdleTimeout = 30 * 60_000;
+const sandboxActivity = new Map<string, Promise<Sandbox>>();
 const luna: Model = { id: "openai/gpt-6-luna", name: "GPT-6 Luna" };
 const claudeModels: Model[] = [
   { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
@@ -28,7 +30,7 @@ export async function provisionProject(projectId: string) {
   const sandbox = await Sandbox.getOrCreate({
     name: sandboxName(projectId),
     ports: [4000],
-    timeout: 900_000,
+    timeout: sandboxIdleTimeout,
     persistent: true,
     signal,
   });
@@ -38,9 +40,41 @@ export async function provisionProject(projectId: string) {
 
 export class WorkspaceUnavailable extends Error {}
 
+export function keepProjectAwake(projectId: string, signal: AbortSignal, resume = true) {
+  // Read the deadline after any concurrent renewal, since extendTimeout adds to it.
+  const previous = sandboxActivity.get(projectId);
+  const activity = (async () => {
+    await previous?.catch(() => {});
+    signal.throwIfAborted();
+    const sandbox = await Sandbox.get({ name: sandboxName(projectId), resume, signal });
+    if (resume && sandbox.timeout !== sandboxIdleTimeout) {
+      await sandbox.update({ timeout: sandboxIdleTimeout }, { signal });
+    }
+    const expiresAt = sandbox.expiresAt?.getTime();
+    const now = Date.now();
+    if (expiresAt !== undefined && expiresAt > now && sandbox.status === "running") {
+      const extension = now + sandboxIdleTimeout - expiresAt;
+      if (extension > 0) {
+        try {
+          await sandbox.currentSession().extendTimeout(extension, { signal });
+        } catch (error) {
+          // The platform may cap a session's lifetime. Keep the running workspace usable.
+          signal.throwIfAborted();
+          console.warn("Sandbox idle deadline could not be renewed", error instanceof Error ? error.name : "Unknown");
+        }
+      }
+    }
+    return sandbox;
+  })().finally(() => {
+    if (sandboxActivity.get(projectId) === activity) sandboxActivity.delete(projectId);
+  });
+  sandboxActivity.set(projectId, activity);
+  return activity;
+}
+
 export async function openProject(projectId: string, signal: AbortSignal) {
   try {
-    const sandbox = await Sandbox.get({ name: sandboxName(projectId), resume: true, signal });
+    const sandbox = await keepProjectAwake(projectId, signal);
     const command = await sandbox.runCommand({ cmd: "test", args: ["-d", workDir], signal });
     if (command.exitCode !== 0) throw new WorkspaceUnavailable();
     return sandbox;

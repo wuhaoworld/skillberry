@@ -94,6 +94,10 @@ export function projectExists(projectId: string) {
   return Boolean(db().prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId));
 }
 
+export function projectIsReady(projectId: string) {
+  return Boolean(db().prepare("SELECT 1 FROM projects WHERE id = ? AND status = 'ready'").get(projectId));
+}
+
 const skillsQuery = `
   SELECT s.name, s.versionId, s.enabled, v.description, v.fileCount
   FROM skills s JOIN skill_versions v ON v.id = s.versionId WHERE s.projectId = ?
