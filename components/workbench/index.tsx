@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronRight, Folder, FolderOpen, FolderPlus, Menu, Plus, SquarePen, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, Menu, Plus, SquarePen, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -10,11 +10,14 @@ import { Input } from "@/components/ui/input";
 import type { Project, Workbench as WorkspaceData } from "@/lib/workbench";
 import { Conversation } from "./conversation";
 
-type View = { id: string; projectId?: string; existing?: boolean };
+type View =
+  | { id: string; projectId?: string; existing?: boolean; overview?: never }
+  | { id?: never; projectId: string; existing?: never; overview: true };
 type ProjectForm = { id: string; name: string; pending: boolean; error?: string };
 
 const initialData: WorkspaceData = { projects: [], tasks: [], models: [] };
-const sidebarItemClassName = "font-normal active:not-aria-[haspopup]:translate-y-0 hover:bg-foreground/4!";
+const sidebarItemBaseClassName = "font-normal active:not-aria-[haspopup]:translate-y-0";
+const sidebarItemClassName = `${sidebarItemBaseClassName} hover:bg-foreground/4!`;
 
 export function Workbench() {
   const [data, setData] = useState(initialData);
@@ -91,14 +94,6 @@ export function Workbench() {
     });
   }
 
-  function expandProject(id: string) {
-    setCollapsed(previous => {
-      const next = new Set(previous);
-      next.delete(id);
-      return next;
-    });
-  }
-
   function showProjectForm(project?: Project) {
     setProjectForm({ id: project?.id || crypto.randomUUID(), name: project?.name || "", pending: false });
   }
@@ -114,8 +109,7 @@ export function Workbench() {
         body: JSON.stringify({ id, name }),
       });
       if (!response.ok) throw new Error(await response.text());
-      expandProject(id);
-      if (view.existing) startDraft(id);
+      if (view.existing || view.overview) startDraft(id);
       else setView(previous => ({ ...previous, projectId: id }));
       setProjectForm(undefined);
       setMobileMenu(false);
@@ -149,7 +143,7 @@ export function Workbench() {
             <FolderPlus data-icon="inline-start" />新建项目
           </Button>
         </div>
-        <nav className="mt-[27px] overflow-auto" aria-label="任务">
+        <nav className="mt-[27px] overflow-auto [scrollbar-gutter:stable]" aria-label="任务">
           <h2 className="mx-2.25 mb-2.25 text-xs/[1.5] font-[550] text-muted-foreground">任务</h2>
           {loaded && !data.projects.length && <p className="mx-2.25 text-xs/[1.65] text-muted-foreground">创建项目后，任务会显示在这里。</p>}
           {data.projects.map(item => {
@@ -158,29 +152,43 @@ export function Workbench() {
             return (
               <div key={item.id} className="py-0.5">
                 <div className="flex min-w-0 items-center">
-                  <Button variant="ghost"
-                    className={`min-w-0 flex-1 justify-start gap-2 overflow-hidden aria-expanded:bg-transparent ${sidebarItemClassName}`}
-                    aria-expanded={!isCollapsed} aria-controls={`project-tasks-${item.id}`}
-                    onClick={() => toggleProject(item.id)}>
-                    {isCollapsed ? <Folder /> : <FolderOpen />}
-                    <span className="truncate">{item.name}</span>
-                    {item.status === "preparing" && <small className="ms-auto text-muted-foreground">准备中</small>}
-                    {item.status === "unavailable" && <small className="ms-auto text-muted-foreground">不可用</small>}
-                  </Button>
+                  <div className="group/project relative min-w-0 flex-1 rounded-lg hover:bg-foreground/4">
+                    <Button variant="ghost"
+                      className={`w-full justify-start gap-2 overflow-hidden hover:bg-transparent! aria-[current=page]:bg-foreground/9! aria-[current=page]:hover:bg-foreground/9! ${sidebarItemBaseClassName}`}
+                      aria-current={view.overview && view.projectId === item.id ? "page" : undefined}
+                      onClick={() => navigate({ projectId: item.id, overview: true })}>
+                      <span className="flex-none group-hover/project:opacity-0 group-has-[:focus-visible]/project:opacity-0 [@media(hover:none)]:opacity-0" aria-hidden="true">
+                        {isCollapsed ? <Folder /> : <FolderOpen />}
+                      </span>
+                      <span className="truncate">{item.name}</span>
+                      {item.status === "preparing" && <small className="ms-auto text-muted-foreground">准备中</small>}
+                      {item.status === "unavailable" && <small className="ms-auto text-muted-foreground">不可用</small>}
+                    </Button>
+                    <Button variant="ghost" size="icon-xs"
+                      className="absolute inset-s-1.75 top-1 opacity-0 transition-none active:translate-none! aria-expanded:bg-transparent group-hover/project:opacity-100 group-has-[:focus-visible]/project:opacity-100 hover:bg-foreground/9! [@media(hover:none)]:opacity-100"
+                      aria-label={`${isCollapsed ? "展开" : "收起"} ${item.name}`}
+                      aria-expanded={!isCollapsed} aria-controls={`project-tasks-${item.id}`}
+                      onClick={() => toggleProject(item.id)}>
+                      {isCollapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+                    </Button>
+                  </div>
                   {item.status === "failed" && (
                     <Button variant="ghost" size="xs" aria-label={`重试创建 ${item.name}`} onClick={() => showProjectForm(item)}>重试</Button>
                   )}
                 </div>
-                <div id={`project-tasks-${item.id}`} hidden={isCollapsed}>
-                  {!isCollapsed && projectTasks.map(entry => (
-                    <Button key={entry.id} variant="ghost"
-                      className={`mt-0.5 flex w-full justify-start overflow-hidden ps-8.5 aria-[current=page]:bg-foreground/9! aria-[current=page]:hover:bg-foreground/9! ${sidebarItemClassName}`}
-                      aria-current={view.id === entry.id ? "page" : undefined}
-                      onClick={() => navigate({ id: entry.id, projectId: item.id, existing: true })}>
-                      <span className="truncate">{entry.title}</span>
-                      {entry.status === "running" && <span className="ms-auto size-1.5 flex-none rounded-full bg-sidebar-primary" aria-label="执行中" />}
-                    </Button>
-                  ))}
+                <div id={`project-tasks-${item.id}`} inert={isCollapsed}
+                  className={`grid transition-[grid-template-rows] duration-200 ease-in-out motion-reduce:transition-none ${isCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}>
+                  <div className="min-h-0 overflow-hidden">
+                    {projectTasks.map(entry => (
+                      <Button key={entry.id} variant="ghost"
+                        className={`mt-0.5 flex w-full justify-start overflow-hidden ps-8.5 aria-[current=page]:bg-foreground/9! aria-[current=page]:hover:bg-foreground/9! ${sidebarItemClassName}`}
+                        aria-current={view.id === entry.id ? "page" : undefined}
+                        onClick={() => navigate({ id: entry.id, projectId: item.id, existing: true })}>
+                        <span className="truncate">{entry.title}</span>
+                        {entry.status === "running" && <span className="ms-auto size-1.5 flex-none rounded-full bg-sidebar-primary" aria-label="执行中" />}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               </div>
             );
@@ -207,21 +215,24 @@ export function Workbench() {
           ) : null}
         </header>
         {loadError && <div className="px-6.5 text-[13px] text-destructive" role="alert">{loadError} <Button variant="ghost" onClick={() => void refresh()}>重试</Button></div>}
-        <Conversation key={view.id} id={view.id} existing={Boolean(view.existing || task)} loaded={loaded}
-          modelOptions={data.models} projects={data.projects} project={project} task={task}
-          busy={data.tasks.some(item => item.projectId === project?.id && item.id !== view.id && item.status === "running")}
-          onProject={id => setView(previous => ({ ...previous, projectId: id }))}
-          onNewProject={showProjectForm}
-          onAccepted={(id, projectId) => {
-            setView(previous => {
-              if (previous.id !== id) return previous;
-              return { id, projectId, existing: true };
-            });
-            expandProject(projectId);
-            void refresh();
-          }}
-          refresh={refresh}
-        />
+        {view.overview ? (
+          <section className="flex-1" aria-label={`${project?.name ?? "项目"}概览`} />
+        ) : (
+          <Conversation key={view.id} id={view.id} existing={Boolean(view.existing || task)} loaded={loaded}
+            modelOptions={data.models} projects={data.projects} project={project} task={task}
+            busy={data.tasks.some(item => item.projectId === project?.id && item.id !== view.id && item.status === "running")}
+            onProject={id => setView(previous => ({ ...previous, projectId: id }))}
+            onNewProject={showProjectForm}
+            onAccepted={(id, projectId) => {
+              setView(previous => {
+                if (previous.id !== id) return previous;
+                return { id, projectId, existing: true };
+              });
+              void refresh();
+            }}
+            refresh={refresh}
+          />
+        )}
         {view.existing && task && <TaskLocation id={task.id} />}
       </main>
       <Dialog open={!!projectForm} onOpenChange={open => { if (!open && !projectForm?.pending) setProjectForm(undefined); }}>
